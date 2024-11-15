@@ -10,10 +10,12 @@ export default defineConfig({
       "contextMenus",
       "activeTab",
       "scripting",
-      "tabs"
+      "tabs",
+      "storage",
+      "notifications"
     ],
     host_permissions: [
-      "https://generativelanguage.googleapis.com/"
+      "<all_urls>"
     ],
     content_scripts: [
       {

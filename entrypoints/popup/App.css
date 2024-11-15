@@ -1,42 +1,104 @@
-#root {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 2rem;
+* {
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #1e1e2f; /* Background color for the popup */
+}
+
+body {
+  font-family: Arial, sans-serif;
+}
+
+.popup-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 20px;
+  width: 100%;
+  max-width: 250px;
+  background-color: transparent; /* Make background transparent */
+  color: #f0f0f5;
+  border-radius: 8px;
+  box-shadow: none; /* Remove any inner shadow */
+}
+
+.title {
+  font-size: 1.2rem;
+  margin-bottom: 15px;
+  color: #ffffff;
   text-align: center;
 }
 
-.logo {
-  height: 6em;
-  padding: 1.5em;
-  will-change: filter;
-  transition: filter 300ms;
-}
-.logo:hover {
-  filter: drop-shadow(0 0 2em #54bc4ae0);
-}
-.logo.react:hover {
-  filter: drop-shadow(0 0 2em #61dafbaa);
+.label {
+  font-size: 0.9rem;
+  margin-bottom: 10px;
+  color: #cccccc;
 }
 
-@keyframes logo-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
+.dropdown {
+  width: 100%;
+  padding: 10px;
+  margin-bottom: 15px;
+  font-size: 1rem;
+  border: none;
+  border-radius: 4px;
+  background-color: #33334d;
+  color: #ffffff;
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  a:nth-of-type(2) .logo {
-    animation: logo-spin infinite 20s linear;
-  }
+.checkbox-container {
+  display: flex;
+  align-items: center;
+  font-size: 0.9rem;
+  margin-bottom: 15px;
 }
 
-.card {
-  padding: 2em;
+.checkbox-container input {
+  margin-right: 8px;
 }
 
-.read-the-docs {
-  color: #888;
+.confirm-button {
+  width: 100%;
+  padding: 10px;
+  font-size: 1rem;
+  color: #ffffff;
+  background-color: #4a90e2;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.3s;
 }
+
+.confirm-button:hover {
+  background-color: #357abd;
+}
+
+.current-mode {
+  font-size: 0.9rem;
+  color: #cccccc;
+  margin-bottom: 10px;
+  text-align: center;
+}
+
+#summaryContent h2 {
+  font-weight: bold;
+  font-size: 18px;
+  margin-top: 10px;
+}
+
+#summaryContent ul {
+  list-style-type: disc;
+  margin-left: 20px;
+}
+
+#summaryContent ul li {
+  margin-bottom: 5px;
+}
+
