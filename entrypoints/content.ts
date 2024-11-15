@@ -4,11 +4,12 @@ export default defineContentScript({
     console.log("Content script loaded.");
 
     chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-      console.log("Received message in content script:", request);
       if (request.action === "displaySummary") {
-        displaySummary(request.summary, request.mode); // Pass mode to display
+        displaySummary(request.summary, request.mode);
       }
     });
+
+    let isDarkMode = true; // Default to dark mode
 
     function displaySummary(summary: string, mode: string) {
       let sidebar = document.getElementById("summarySidebar");
@@ -18,43 +19,16 @@ export default defineContentScript({
       }
     
       const contentArea = document.getElementById("summaryContent");
-    
       if (contentArea) {
-        if (mode === "bullet_points") {
-          // Split the summary by newlines or asterisks to separate each item
-          const lines = summary.split(/\*\s+/).filter(line => line.trim() !== "");
-    
-          contentArea.innerHTML = ""; // Clear any existing content
-    
-          lines.forEach(line => {
-            // Check if line represents a title (contains a colon or specific keywords)
-            if (/^[A-Za-z\s]+:$/.test(line.trim())) {
-              // Create a bold title element
-              const title = document.createElement("div");
-              title.style.fontWeight = "bold";
-              title.style.marginTop = "15px";
-              title.style.marginBottom = "5px";
-              title.textContent = line.trim().replace(/:$/, ""); // Remove trailing colon
-              contentArea.appendChild(title);
-            } else {
-              // Create a paragraph element for regular content
-              const content = document.createElement("p");
-              content.style.margin = "0 0 10px 20px"; // Indent content under the title
-              content.innerText = line.trim();
-              contentArea.appendChild(content);
-            }
-          });
-        } else {
-          // For other modes, display as plain text
-          contentArea.innerHTML = `<p style="margin-bottom: 15px;">${summary}</p>`;
-        }
+        contentArea.innerHTML = `<p>${summary}</p>`;
+        contentArea.style.color = isDarkMode ? "#F0F0F0" : "#333"; // Update font color based on mode
       }
     
       const modeIndicator = document.getElementById("modeIndicator");
       if (modeIndicator) {
         modeIndicator.innerText = `Current Mode: ${mode || "Not set"}`;
       }
-    }    
+    }
 
     function createSidebar() {
       const sidebar = document.createElement("div");
@@ -65,15 +39,15 @@ export default defineContentScript({
         right: 0;
         width: 350px;
         height: 100%;
-        background-color: #1e1e1e;
-        border-left: 2px solid #333;
-        box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+        background-color: ${isDarkMode ? "#1e1e1e" : "#F5F5F7"};
+        border-left: 1px solid ${isDarkMode ? "#333" : "#DDD"};
+        box-shadow: -2px 0px 15px rgba(0, 0, 0, 0.1);
         z-index: 10000;
         display: flex;
         flex-direction: column;
-        font-family: Arial, sans-serif;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
         transition: transform 0.3s ease;
-        color: #f0f0f0;
+        color: ${isDarkMode ? "#F0F0F0" : "#333"};
       `;
 
       const header = createSidebarHeader();
@@ -90,37 +64,36 @@ export default defineContentScript({
     function createSidebarHeader() {
       const header = document.createElement("div");
       header.style.cssText = `
-        padding: 20px;
-        background-color: #333;
-        color: #f0f0f0;
+        padding: 15px 20px;
+        background-color: ${isDarkMode ? "rgba(255, 255, 255, 0.1)" : "rgba(255, 255, 255, 0.95)"};
+        border-bottom: 1px solid ${isDarkMode ? "#444" : "#DDD"};
         display: flex;
         justify-content: space-between;
         align-items: center;
-        border-bottom: 1px solid #444;
       `;
-    
+
       const headerTitle = document.createElement("h2");
       headerTitle.innerText = "Summary";
       headerTitle.style.cssText = `
-        font-size: 20px;
+        font-size: 18px;
         margin: 0;
-        color: #ffcc00;
+        color: ${isDarkMode ? "#ffcc00" : "#333"};
+        font-weight: 600;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
       `;
-    
-      // Create mode selector dropdown
+
+      // Mode Selector
       const modeSelector = document.createElement("select");
       modeSelector.style.cssText = `
-        background-color: #444;
-        color: #fff;
+        background-color: ${isDarkMode ? "#333" : "#EEE"};
+        color: ${isDarkMode ? "#fff" : "#333"};
         border: none;
-        padding: 5px 10px;
+        padding: 5px;
         font-size: 14px;
-        border-radius: 5px;
-        margin-left: 10px;
+        border-radius: 8px;
+        font-family: inherit;
         cursor: pointer;
       `;
-    
-      // Options for the dropdown
       const modes = ["brief", "detailed", "bullet_points"];
       modes.forEach((mode) => {
         const option = document.createElement("option");
@@ -128,51 +101,84 @@ export default defineContentScript({
         option.textContent = mode.charAt(0).toUpperCase() + mode.slice(1).replace("_", " ");
         modeSelector.appendChild(option);
       });
-    
-      // Load and set the current mode from storage
       chrome.storage.sync.get("summarizeMode", (data) => {
         modeSelector.value = data.summarizeMode || "brief";
       });
-    
-      // Update mode in storage when the selection changes
       modeSelector.addEventListener("change", () => {
         const selectedMode = modeSelector.value;
         chrome.storage.sync.set({ summarizeMode: selectedMode }, () => {
           showInAppNotification(`Switched to ${selectedMode} mode`);
         });
       });
-    
+
+      // Dark Mode Toggle Button
+      const themeToggleButton = document.createElement("button");
+      themeToggleButton.innerHTML = isDarkMode ? "🌙" : "☀️";
+      themeToggleButton.style.cssText = `
+        background: none;
+        border: none;
+        color: ${isDarkMode ? "#ffcc00" : "#333"};
+        font-size: 20px;
+        cursor: pointer;
+        margin-left: 10px;
+      `;
+      themeToggleButton.onclick = () => toggleTheme(themeToggleButton);
+
+      // Minimize Button
       const minimizeButton = document.createElement("button");
       minimizeButton.innerText = "−";
       minimizeButton.style.cssText = `
         background: none;
         border: none;
-        color: #f0f0f0;
+        color: ${isDarkMode ? "#ffcc00" : "#333"};
         font-size: 20px;
         cursor: pointer;
         margin-left: 10px;
       `;
       minimizeButton.onclick = () => toggleSidebar();
-    
+
       header.appendChild(headerTitle);
       header.appendChild(modeSelector);
+      header.appendChild(themeToggleButton);
       header.appendChild(minimizeButton);
-    
+
       return header;
-    }    
+    }
+
+    function toggleTheme(themeToggleButton: HTMLButtonElement) {
+      isDarkMode = !isDarkMode;
+      themeToggleButton.innerHTML = isDarkMode ? "🌙" : "☀️";
+    
+      const sidebar = document.getElementById("summarySidebar");
+      const contentArea = document.getElementById("summaryContent");
+    
+      if (sidebar) {
+        sidebar.style.backgroundColor = isDarkMode ? "#1e1e1e" : "#F5F5F7";
+        sidebar.style.borderLeftColor = isDarkMode ? "#333" : "#DDD";
+      }
+      
+      // Update contentArea color for dark/light mode
+      if (contentArea) {
+        contentArea.style.color = isDarkMode ? "#F0F0F0" : "#333";
+      }
+    
+      // Update the mode indicator and other elements to match the new theme
+      const headerTitle = sidebar?.querySelector("h2");
+      if (headerTitle) {
+        headerTitle.style.color = isDarkMode ? "#ffcc00" : "#333";
+      }
+    }
 
     function toggleSidebar() {
       const sidebar = document.getElementById("summarySidebar");
       const minimizedIcon = document.getElementById("minimizedSidebarIcon");
 
       if (sidebar) {
-        sidebar.style.display = "none"; // Hide the sidebar
-
-        // If minimized icon doesn't exist, create it
+        sidebar.style.display = "none";
         if (!minimizedIcon) {
           createMinimizedIcon();
         } else {
-          minimizedIcon.style.display = "flex"; // Show the icon if it was hidden
+          minimizedIcon.style.display = "flex";
         }
       }
     }
@@ -184,19 +190,19 @@ export default defineContentScript({
         position: fixed;
         top: 20px;
         right: 20px;
-        width: 50px;
-        height: 50px;
-        background-color: #333;
-        color: #fff;
+        width: 45px;
+        height: 45px;
+        background-color: ${isDarkMode ? "#333" : "#DDD"};
+        color: ${isDarkMode ? "#fff" : "#333"};
         display: flex;
         align-items: center;
         justify-content: center;
         border-radius: 50%;
         cursor: pointer;
-        box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
         z-index: 10001;
       `;
-      minimizedIcon.innerHTML = `<span style="font-size: 24px;">☰</span>`;
+      minimizedIcon.innerHTML = `<span style="font-size: 22px;">☰</span>`;
       minimizedIcon.onclick = () => restoreSidebar();
 
       document.body.appendChild(minimizedIcon);
@@ -207,11 +213,11 @@ export default defineContentScript({
       const minimizedIcon = document.getElementById("minimizedSidebarIcon");
 
       if (sidebar) {
-        sidebar.style.display = "flex"; // Show the sidebar
+        sidebar.style.display = "flex";
       }
 
       if (minimizedIcon) {
-        minimizedIcon.style.display = "none"; // Hide the minimized icon
+        minimizedIcon.style.display = "none";
       }
     }
 
@@ -219,12 +225,12 @@ export default defineContentScript({
       const contentArea = document.createElement("div");
       contentArea.id = "summaryContent";
       contentArea.style.cssText = `
-        padding: 20px;
+        padding: 15px 20px;
         overflow-y: auto;
         flex-grow: 1;
+        font-size: 15px;
         line-height: 1.6;
-        font-size: 16px;
-        color: #d4d4d4;
+        color: ${isDarkMode ? "#F0F0F0" : "#333"};
       `;
       return contentArea;
     }
@@ -232,36 +238,36 @@ export default defineContentScript({
     function createSidebarFooter() {
       const footer = document.createElement("div");
       footer.style.cssText = `
-        padding: 20px;
-        border-top: 1px solid #444;
-        background-color: #333;
+        padding: 15px;
+        border-top: 1px solid ${isDarkMode ? "#444" : "#DDD"};
+        background-color: ${isDarkMode ? "rgba(255, 255, 255, 0.1)" : "rgba(255, 255, 255, 0.9)"};
         display: flex;
         justify-content: space-around;
       `;
 
       const copyButton = document.createElement("button");
-      copyButton.innerText = "Copy to Clipboard";
+      copyButton.innerText = "Copy";
       copyButton.style.cssText = `
-        background-color: #4caf50;
+        background-color: ${isDarkMode ? "#007AFF" : "#1A73E8"};
         color: #fff;
         border: none;
-        padding: 10px;
+        padding: 8px 16px;
         font-size: 14px;
         cursor: pointer;
-        border-radius: 5px;
+        border-radius: 12px;
       `;
       copyButton.onclick = copySummaryToClipboard;
 
       const tryAgainButton = document.createElement("button");
       tryAgainButton.innerText = "Try Again";
       tryAgainButton.style.cssText = `
-        background-color: #ff8c00;
+        background-color: ${isDarkMode ? "#FF9500" : "#FB8C00"};
         color: #fff;
         border: none;
-        padding: 10px;
+        padding: 8px 16px;
         font-size: 14px;
         cursor: pointer;
-        border-radius: 5px;
+        border-radius: 12px;
       `;
       tryAgainButton.onclick = regenerateSummary;
 
@@ -271,34 +277,29 @@ export default defineContentScript({
       return footer;
     }
 
-    function regenerateSummary() {
-      chrome.storage.sync.get("summarizeMode", (data) => {
-        const mode = data.summarizeMode || "brief";
-        
-        // Trigger the background script to regenerate the summary
-        chrome.runtime.sendMessage(
-          { command: "summarize", mode },
-          (response) => {
-            if (response.summary) {
-              displaySummary(response.summary, mode);
-            } else if (response.error) {
-              showInAppNotification("Failed to regenerate summary");
-            }
-          }
-        );
-      });
-    }
-
     function copySummaryToClipboard() {
       const contentArea = document.getElementById("summaryContent");
       if (contentArea) {
         const text = contentArea.innerText;
         navigator.clipboard.writeText(text).then(() => {
-          showInAppNotification("Summary copied to clipboard!");
+          showInAppNotification("Summary copied!");
         }).catch((error) => {
           console.error("Failed to copy text: ", error);
         });
       }
+    }
+
+    function regenerateSummary() {
+      chrome.storage.sync.get("summarizeMode", (data) => {
+        const mode = data.summarizeMode || "brief";
+        chrome.runtime.sendMessage({ command: "summarize", mode }, (response) => {
+          if (response.summary) {
+            displaySummary(response.summary, mode);
+          } else if (response.error) {
+            showInAppNotification("Failed to regenerate summary");
+          }
+        });
+      });
     }
 
     function showInAppNotification(message: string) {
@@ -309,11 +310,11 @@ export default defineContentScript({
         position: fixed;
         bottom: 20px;
         right: 20px;
-        background-color: #333;
-        color: #fff;
+        background-color: ${isDarkMode ? "#333" : "#F5F5F5"};
+        color: ${isDarkMode ? "#fff" : "#333"};
         padding: 10px 20px;
-        border-radius: 5px;
-        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        border-radius: 12px;
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
         z-index: 10001;
         opacity: 0;
         transition: opacity 0.3s ease;
@@ -321,14 +322,8 @@ export default defineContentScript({
 
       document.body.appendChild(toast);
 
-      setTimeout(() => {
-        toast.style.opacity = "1";
-      }, 50);
-
-      setTimeout(() => {
-        toast.style.opacity = "0";
-        setTimeout(() => toast.remove(), 300);
-      }, 3000);
+      setTimeout(() => { toast.style.opacity = "1"; }, 50);
+      setTimeout(() => { toast.style.opacity = "0"; setTimeout(() => toast.remove(), 300); }, 3000);
     }
   },
 });
