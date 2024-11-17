@@ -1,4 +1,5 @@
 import "./sidebar.css";
+import { marked } from "marked";
 
 export default defineContentScript({
   matches: ["<all_urls>"],
@@ -14,7 +15,7 @@ export default defineContentScript({
 
     let isDarkMode = true; // Default to dark mode
 
-    function displaySummary(summary: string, mode: string) {
+    async function displaySummary(summary: string, mode: string) {
       let sidebar = document.getElementById("summarySidebar");
       if (!sidebar) {
         sidebar = createSidebar();
@@ -23,19 +24,25 @@ export default defineContentScript({
       } else {
         console.log("Sidebar already exists.");
       }
-
+    
       const contentArea = document.getElementById("summaryContent");
       if (contentArea) {
-        contentArea.innerHTML = `<p>${summary}</p>`;
+        if (mode === "bullet_points") {
+          // Render Markdown content
+          const renderedContent = await marked(summary);
+          contentArea.innerHTML = renderedContent;
+        } else {
+          contentArea.innerHTML = `<p>${summary}</p>`;
+        }
         contentArea.style.color = isDarkMode ? "#F0F0F0" : "#333"; // Update font color based on mode
       }
-
+    
       const modeIndicator = document.getElementById("modeIndicator");
       if (modeIndicator) {
         modeIndicator.innerText = `Current Mode: ${mode || "Not set"}`;
       }
     }
-
+    
     function createSidebar() {
       const sidebar = document.createElement("div");
       sidebar.id = "summarySidebar";
