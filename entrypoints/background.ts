@@ -1,4 +1,4 @@
-const apiKey = import.meta.env.VITE_API_KEY as string;
+const apiKey = import.meta.env.VITE_API_KEY_CCT as string;
 let lastHighlightedText: string | null = null;
 
 export default defineBackground(() => {
@@ -10,32 +10,45 @@ export default defineBackground(() => {
       title: "Summarize Selection",
       contexts: ["selection"],
     });
+
+    // Add context menu for summarizing the full page
+    chrome.contextMenus.create({
+      id: "summarizeFullPage",
+      title: "Summarize Full Page",
+      contexts: ["page"],
+    });
   });
 
   chrome.contextMenus.onClicked.addListener((info, tab) => {
-    if (info.menuItemId === "summarizeSelection" && info.selectionText && tab?.id) {
-      lastHighlightedText = info.selectionText;
+    if (tab?.id) {
+      if (info.menuItemId === "summarizeSelection" && info.selectionText) {
+        // Summarize selected text
+        lastHighlightedText = info.selectionText;
 
-      chrome.storage.sync.get(["summarizeMode"], (data) => {
-        const mode = data.summarizeMode || "brief";
-        const textToSummarize = lastHighlightedText || "";
+        chrome.storage.sync.get(["summarizeMode"], (data) => {
+          const mode = data.summarizeMode || "brief";
+          const textToSummarize = lastHighlightedText || "";
 
-        chrome.scripting.executeScript(
-          {
-            target: { tabId: tab.id! },
-            files: ["content-scripts/content.js"],
-          },
-          () => {
-            summarizeText(textToSummarize, mode)
-              .then((summary) => {
-                chrome.tabs.sendMessage(tab.id!, { action: "displaySummary", summary, mode });
-              })
-              .catch((error) => {
-                console.error("Error summarizing text:", error);
-              });
-          }
-        );
-      });
+          chrome.scripting.executeScript(
+            {
+              target: { tabId: tab.id as number },
+              files: ["content-scripts/content.js"],
+            },
+            () => {
+              summarizeText(textToSummarize, mode)
+                .then((summary) => {
+                  chrome.tabs.sendMessage(tab.id!, { action: "displaySummary", summary, mode });
+                })
+                .catch((error) => {
+                  console.error("Error summarizing text:", error);
+                });
+            }
+          );
+        });
+      } else if (info.menuItemId === "summarizeFullPage") {
+        // Call full-page summarization logic
+        summarizeFullPage(tab.id!);
+      }
     }
   });
 
@@ -59,38 +72,60 @@ export default defineBackground(() => {
     }
 
     if (message.action === "summarizeFullPage") {
-      // Handle full-page summarization
+      // Handle full-page summarization from popup
       chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
         const activeTab = tabs[0];
         if (activeTab?.id) {
-          chrome.scripting.executeScript(
-            {
-              target: { tabId: activeTab.id },
-              func: () => document.body.innerText, // Retrieves the entire page text content
-            },
-            (results) => {
-              const fullPageText = results[0].result;
-              chrome.storage.sync.get(["summarizeMode"], (data) => {
-                const mode = data.summarizeMode || "brief";
-                // TODO: Make sure there's a string passed in before calling summarizeText
-                summarizeText(fullPageText || "", mode)
-                  .then((summary) => {
-                    chrome.tabs.sendMessage(activeTab.id!, { action: "displaySummary", summary, mode });
-                    sendResponse({ success: true });
-                  })
-                  .catch((error) => {
-                    console.error("Error summarizing full page:", error);
-                    sendResponse({ success: false, error: "Failed to summarize full page" });
-                  });
-              });
-            }
-          );
+          summarizeFullPage(activeTab.id).then(() => {
+            sendResponse({ success: true });
+          }).catch((error) => {
+            console.error("Error summarizing full page:", error);
+            sendResponse({ success: false, error: "Failed to summarize full page" });
+          });
         }
       });
+
       return true; // Keeps the message channel open for async response
     }
   });
 
+  async function summarizeFullPage(tabId: number): Promise<void> {
+    return new Promise((resolve, reject) => {
+      chrome.scripting.executeScript(
+        {
+          target: { tabId },
+          func: () => document.body.innerText, // Extract full page content
+        },
+        (results) => {
+          const fullPageText = results[0]?.result;
+  
+          if (!fullPageText) {
+            reject("Failed to retrieve full page text.");
+            return;
+          }
+  
+          // Update lastHighlightedText with the full-page text
+          lastHighlightedText = fullPageText;
+  
+          // Retrieve the current summarize mode from storage
+          chrome.storage.sync.get(["summarizeMode"], (data) => {
+            const mode = data.summarizeMode || "brief";
+  
+            summarizeText(fullPageText, mode)
+              .then((summary) => {
+                chrome.tabs.sendMessage(tabId, { action: "displaySummary", summary, mode });
+                resolve();
+              })
+              .catch((error) => {
+                console.error("Error summarizing full page:", error);
+                reject(error);
+              });
+          });
+        }
+      );
+    });
+  }  
+  
   async function summarizeText(selectedText: string, mode: string): Promise<string> {
     const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
 

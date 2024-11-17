@@ -13,50 +13,56 @@ const App: React.FC = () => {
     });
   }, []);
 
+  const handleModeChange = (newMode: string) => {
+    setMode(newMode);
+    chrome.storage.sync.set({ summarizeMode: newMode }, () => {
+      console.log(`Summarize mode updated to: ${newMode}`);
+    });
+  };
+
+  const handleFullPageSummarization = () => {
+    chrome.runtime.sendMessage({ action: "summarizeFullPage" }, (response) => {
+      if (response?.success) {
+        chrome.notifications.create({
+          type: "basic",
+          iconUrl: "icon/48.png",
+          title: "Full Page Summarized",
+          message: "The full page content has been summarized.",
+        });
+      } else {
+        chrome.notifications.create({
+          type: "basic",
+          iconUrl: "icon/48.png",
+          title: "Error",
+          message: "Failed to summarize the full page.",
+        });
+      }
+    });
+    window.close(); // Close popup after action
+  };
+
   const handleConfirmSelection = () => {
+    chrome.storage.sync.set(
+      {
+        summarizeMode: mode,
+        fullPage,
+      },
+      () => {
+        chrome.notifications.create({
+          type: "basic",
+          iconUrl: "icon/48.png",
+          title: "Options Saved",
+          message: `Mode set to ${
+            mode.charAt(0).toUpperCase() + mode.slice(1)
+          }.`,
+        });
+      }
+    );
+
     if (fullPage) {
-      // Trigger full page summarization
-      chrome.runtime.sendMessage(
-        { action: "summarizeFullPage", mode },
-        (response) => {
-          if (response.success) {
-            chrome.notifications.create({
-              type: "basic",
-              iconUrl: "icon/48.png", // Update this to the correct path of your icon
-              title: "Full Page Summarized",
-              message: "The full page content has been summarized.",
-            });
-          } else {
-            chrome.notifications.create({
-              type: "basic",
-              iconUrl: "icon/48.png",
-              title: "Summarization Error",
-              message: "Failed to summarize the full page.",
-            });
-          }
-        }
-      );
-      // Close the popup after triggering full page summarization
-      window.close();
+      handleFullPageSummarization();
     } else {
-      // Save selected options to Chrome storage
-      chrome.storage.sync.set(
-        {
-          summarizeMode: mode,
-          fullPage: false,
-        },
-        () => {
-          // Show a notification about the selected mode
-          chrome.notifications.create({
-            type: "basic",
-            iconUrl: "icon/48.png",
-            title: "Summarizer Mode Set",
-            message: `Mode: ${mode.charAt(0).toUpperCase() + mode.slice(1)}`,
-          });
-          // Close the popup after saving options
-          window.close();
-        }
-      );
+      window.close(); // Close popup after saving options
     }
   };
 
@@ -70,7 +76,7 @@ const App: React.FC = () => {
       <select
         id="mode"
         value={mode}
-        onChange={(e) => setMode(e.target.value)}
+        onChange={(e) => handleModeChange(e.target.value)}
         className="dropdown"
       >
         <option value="brief">Brief</option>
