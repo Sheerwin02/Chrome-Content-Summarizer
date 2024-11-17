@@ -46,6 +46,14 @@
   margin: 0;
 }
 
+.dark-title {
+  color: #f5f5f7; /* Light text color for dark mode */
+}
+
+.light-title {
+  color: #1c1c1e; /* Dark text color for light mode */
+}
+
 /* Content Area Styles */
 .content-area {
   flex-grow: 1;
