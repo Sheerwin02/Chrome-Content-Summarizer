@@ -35,7 +35,7 @@ export default defineContentScript({
       const contentArea = document.getElementById("summaryContent");
       if (contentArea) {
         try {
-          // Render markdown content using `marked`
+          // Render only the summary in the contentArea
           const renderedContent = await marked.parse(summary);
           contentArea.innerHTML = renderedContent;
     
@@ -45,29 +45,18 @@ export default defineContentScript({
           contentArea.innerHTML = `<p>${escapeHTML(summary)}</p>`;
         }
       }
+    
+      // Store the key takeaways in Chrome storage for later use
+      chrome.storage.sync.set({ lastTakeaways: takeaways }, () => {
+        console.log("Key takeaways stored successfully.");
+      });
+    
+      // Update the mode indicator
       const modeIndicator = document.getElementById("modeIndicator");
       if (modeIndicator) {
         modeIndicator.innerText = `Current Mode: ${mode || "Not set"}`;
       }
-    
-      // // Display the Key Takeaways
-      // const keyTakeawaysContent = document.getElementById("keyTakeawaysContent");
-      // if (keyTakeawaysContent) {
-      //   if (Array.isArray(takeaways) && takeaways.length > 0) {
-      //     const keyTakeawaysContent = document.getElementById("keyTakeawaysContent");
-      //     if (keyTakeawaysContent) {
-      //       keyTakeawaysContent.innerHTML = takeaways
-      //         .map(
-      //           (takeaway) =>
-      //             `<div class="tip"><span class="tip-icon">💡</span>${escapeHTML(takeaway)}</div>`
-      //         )
-      //         .join("");
-      //       keyTakeawaysContent.style.display = "none"; // Hide in sidebar, handled by modal
-      //     }
-      //   }
-      // }
     }
-        
     
     function escapeHTML(str: string): string {
       const div = document.createElement("div");
@@ -84,15 +73,8 @@ export default defineContentScript({
       const contentArea = createContentArea();
       const footer = createSidebarFooter();
 
-            // Create Key Takeaways Section
-      const keyTakeawaysSection = document.createElement("div");
-      keyTakeawaysSection.id = "keyTakeawaysContent";
-      keyTakeawaysSection.className = "key-takeaways";
-      keyTakeawaysSection.style.display = "none"; // Initially hidden
-
       sidebar.appendChild(header);
       sidebar.appendChild(contentArea);
-      sidebar.appendChild(keyTakeawaysSection); 
       sidebar.appendChild(footer);
 
       return sidebar;
@@ -221,37 +203,7 @@ export default defineContentScript({
       const contentArea = document.createElement("div");
       contentArea.id = "summaryContent";
       contentArea.className = "content-area";
-    
-      // Key Takeaways Section
-      const keyTakeawaysContainer = document.createElement("div");
-      keyTakeawaysContainer.id = "keyTakeawaysContainer";
-      keyTakeawaysContainer.className = "key-takeaways-container";
-    
-      const keyTakeawaysHeader = document.createElement("div");
-      keyTakeawaysHeader.className = "key-takeaways-header";
-      keyTakeawaysHeader.innerHTML = `
-        <h3>Key Takeaways</h3>
-        <button id="toggleTakeaways" class="toggle-button">▼</button>
-      `;
-    
-      keyTakeawaysHeader.querySelector("#toggleTakeaways")?.addEventListener("click", () => {
-        const takeawaysContent = document.getElementById("keyTakeawaysContent");
-        if (takeawaysContent) {
-          const isVisible = takeawaysContent.style.display !== "none";
-          takeawaysContent.style.display = isVisible ? "none" : "block";
-          (keyTakeawaysHeader.querySelector(".toggle-button") as HTMLElement).innerText = isVisible ? "▶" : "▼";
-        }
-      });
-    
-      const keyTakeawaysContent = document.createElement("div");
-      keyTakeawaysContent.id = "keyTakeawaysContent";
-      keyTakeawaysContent.className = "key-takeaways-content";
-      keyTakeawaysContent.style.display = "none"; // Initially hidden
-    
-      keyTakeawaysContainer.appendChild(keyTakeawaysHeader);
-      keyTakeawaysContainer.appendChild(keyTakeawaysContent);
-    
-      contentArea.appendChild(keyTakeawaysContainer);
+
       return contentArea;
     }
     

@@ -153,41 +153,29 @@ export default defineBackground(() => {
     let promptText = "";
     switch (mode) {
       case "detailed":
-        promptText = `Provide a detailed summary of the following content with all necessary context. After the summary, generate 3-5 key takeaways (actionable insights) based on the content:
+        promptText = `Provide a detailed summary of the following content. 
+          After completing the summary, clearly separate the "Key Takeaways" section with this title and provide 3-5 actionable insights:
           "${selectedText}"`;
         break;
   
-        case "bullet_points":
-          promptText = `
-            Create a professional and well-organized summary of the following content in markdown bullet-point format.
-            Use the following guidelines:
-            - Each key section must be prefixed with a bold header in markdown (e.g., **Company Overview**).
-            - Use a new line between each header and its bullet points.
-            - Each bullet point must start with a dash (-) and appear on its own line.
-            - Do not add extra asterisks or other unnecessary symbols in the output.
-            Content:
-            "${selectedText}"
-            After the summary, generate 3-5 key takeaways (actionable insights) using the same markdown structure:
-            - **Key Takeaway 1**: [Actionable insight]
-            - **Key Takeaway 2**: [Actionable insight]
-          `;
+      case "bullet_points":
+        promptText = `
+          Create a professional, well-organized summary of the following content in markdown bullet-point format:
+          - Use bold headers (e.g., **Section Title**) to organize the summary.
+          - Separate a section titled "Key Takeaways" at the end with actionable insights:
+            - Example: **Key Takeaway 1**: [Actionable insight].
+          Content:
+          "${selectedText}"
+        `;
         break;
   
       default:
-        promptText = `Summarize the following content in a brief and concise manner. After the summary, generate 3-5 key takeaways (actionable insights) based on the content:
+        promptText = `Summarize the following content briefly and concisely. Clearly separate the "Key Takeaways" section with this title and provide actionable insights:
           "${selectedText}"`;
     }
   
     const requestBody = {
-      contents: [
-        {
-          parts: [
-            {
-              text: promptText,
-            },
-          ],
-        },
-      ],
+      contents: [{ parts: [{ text: promptText }] }],
     };
   
     console.log("Requesting summary with payload:", requestBody);
@@ -195,15 +183,11 @@ export default defineBackground(() => {
     try {
       const response = await fetch(apiUrl, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(requestBody),
       });
   
-      if (!response.ok) {
-        throw new Error(`API request failed with status ${response.status}`);
-      }
+      if (!response.ok) throw new Error(`API request failed with status ${response.status}`);
   
       const data = await response.json();
       console.log("API Response:", JSON.stringify(data, null, 2));
@@ -216,34 +200,26 @@ export default defineBackground(() => {
         data.candidates[0].content.parts[0].text
       ) {
         const rawOutput = data.candidates[0].content.parts[0].text;
-      
-        // Split the raw output into lines
-        const lines = rawOutput.split("\n").filter((line: string) => line.trim() !== "");
-      
-        // Extract summary and key takeaways
-        let summary = lines.join("\n"); // Re-add newlines between parsed lines
+  
+        // Use regex to split the summary and key takeaways
+        const summaryMatch = rawOutput.split(/\*\*Key Takeaways\*\*/i); // Split at "Key Takeaways" header
+        const summary = summaryMatch[0]?.trim(); // Everything before "Key Takeaways"
         const takeaways: string[] = [];
-
-        let isTakeawaySection = false;
-      
-        for (const line of lines) {
-          if (line.toLowerCase().includes("key takeaways")) {
-            isTakeawaySection = true;
-            continue; // Skip the header line
-          }
-      
-          if (isTakeawaySection) {
-            takeaways.push(line.replace(/^- /, "").trim());
-          } else {
-            summary += `${line} `;
+  
+        if (summaryMatch.length > 1) {
+          // Process the "Key Takeaways" section
+          const takeawaysSection = summaryMatch[1];
+          const takeawayLines = takeawaysSection.split("\n").filter((line: String) => line.trim().startsWith("*"));
+  
+          for (const line of takeawayLines) {
+            takeaways.push(line.replace(/^\*+/, "").trim()); // Clean up markdown bullet points
           }
         }
-      
-        console.log("Parsed Summary:", summary.trim());
+  
+        console.log("Parsed Summary:", summary);
         console.log("Parsed Takeaways:", takeaways);
-      
-        return { summary: summary.trim(), takeaways };
-      
+  
+        return { summary, takeaways };
       } else {
         throw new Error("No valid summary content found in API response");
       }
