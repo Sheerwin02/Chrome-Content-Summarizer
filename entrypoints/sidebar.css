@@ -214,3 +214,176 @@
   transform: scale(1.1); /* Subtle zoom effect */
   box-shadow: 0 6px 15px rgba(0, 0, 0, 0.3);
 }
+
+.key-takeaways {
+  margin-top: 20px;
+  padding: 15px;
+  background-color: rgba(255, 255, 255, 0.1); /* Light translucent for dark mode */
+  border-radius: 8px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: inherit;
+}
+
+.key-takeaways .tip {
+  display: flex;
+  align-items: flex-start;
+  margin-bottom: 10px;
+}
+
+.key-takeaways .tip-icon {
+  font-size: 18px;
+  margin-right: 10px;
+}
+
+.key-takeaways .tip-text {
+  flex-grow: 1;
+}
+
+/* Modal overlay */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: rgba(0, 0, 0, 0.6);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 10000;
+}
+
+/* Modal content */
+.modal-content {
+  background: #fff;
+  padding: 20px;
+  border-radius: 8px;
+  max-width: 500px;
+  width: 90%;
+  text-align: center;
+  overflow-y: auto;
+  max-height: 80%;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+}
+
+/* Modal takeaways */
+.modal-takeaways {
+  margin-top: 10px;
+  text-align: left;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.modal-tip {
+  display: flex;
+  align-items: flex-start;
+  margin: 10px 0;
+}
+
+.tip-icon {
+  margin-right: 10px;
+  font-size: 18px;
+}
+
+/* Close button */
+.modal-close {
+  margin-top: 15px;
+  padding: 10px 20px;
+  border: none;
+  border-radius: 5px;
+  background-color: #007aff;
+  color: #fff;
+  cursor: pointer;
+}
+
+.modal-close:hover {
+  background-color: #005bb5;
+}
+
+/* View Key Takeaways Button */
+.view-takeaways-btn {
+  flex: 1;
+  max-width: 140px;
+  padding: 10px 15px;
+  border: none;
+  border-radius: 20px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: center;
+  background: linear-gradient(135deg, #007aff, #0a84ff); /* Sleek gradient */
+  color: #fff;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); /* Soft shadow */
+  transition: all 0.3s ease;
+}
+
+.view-takeaways-btn:hover {
+  background: linear-gradient(135deg, #005bb5, #007aff); /* Subtle darker gradient on hover */
+  transform: scale(1.05); /* Slight zoom effect */
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.2); /* More prominent shadow */
+}
+
+.view-takeaways-btn:active {
+  transform: scale(0.95); /* Shrink slightly on click */
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.markdown-content {
+  font-size: 16px;
+  line-height: 1.6;
+  color: inherit;
+}
+
+.markdown-content h1,
+.markdown-content h2,
+.markdown-content h3,
+.markdown-content h4,
+.markdown-content h5,
+.markdown-content h6 {
+  margin: 1em 0 0.5em;
+  font-weight: bold;
+}
+
+.markdown-content p {
+  margin: 0.5em 0;
+}
+
+.markdown-content ul {
+  list-style: disc;
+  margin-left: 20px;
+}
+
+.markdown-content ol {
+  list-style: decimal;
+  margin-left: 20px;
+}
+
+.markdown-content li {
+  margin-bottom: 0.5em;
+}
+
+.markdown-content strong {
+  font-weight: bold;
+}
+
+.markdown-content em {
+  font-style: italic;
+}
+
+.markdown-content a {
+  color: #007aff;
+  text-decoration: underline;
+}
+
+.markdown-content a:hover {
+  text-decoration: none;
+}
+
+.markdown-content blockquote {
+  border-left: 4px solid #ccc;
+  padding-left: 15px;
+  color: #666;
+  margin: 1em 0;
+  font-style: italic;
+}
