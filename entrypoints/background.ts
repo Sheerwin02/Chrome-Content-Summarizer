@@ -187,7 +187,17 @@ export default defineBackground(() => {
         body: JSON.stringify(requestBody),
       });
   
-      if (!response.ok) throw new Error(`API request failed with status ${response.status}`);
+      if (!response.ok) {
+        let errorMessage = `API request failed with status ${response.status}`;
+        try {
+          // Attempt to parse the response body for additional error details
+          const errorDetails = await response.json();
+          errorMessage += `: ${errorDetails.error?.message || JSON.stringify(errorDetails)}`;
+        } catch (parseError) {
+          errorMessage += " (Unable to parse error details)";
+        }
+        throw new Error(errorMessage);
+      }      
   
       const data = await response.json();
       console.log("API Response:", JSON.stringify(data, null, 2));
