@@ -278,7 +278,7 @@ export default defineContentScript({
       });
     }    
 
-    function showKeyTakeawaysModal(takeaways: string[]) {
+    async function showKeyTakeawaysModal(takeaways: string[]) {
       // Remove existing modal if any
       const existingModal = document.getElementById("keyTakeawaysModal");
       if (existingModal) {
@@ -290,24 +290,46 @@ export default defineContentScript({
       modal.id = "keyTakeawaysModal";
       modal.className = "modal-overlay";
     
+      // Process key takeaways as Markdown
+      const renderedTakeaways = await Promise.all(
+        takeaways.map((takeaway) => marked.parse(takeaway))
+      );
+    
       // Modal content
       modal.innerHTML = `
         <div class="modal-content">
-          <h3>Key Takeaways</h3>
+          <h3 style="font-family: 'San Francisco', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #ffffff;">Key Takeaways</h3>
           <div class="modal-takeaways">
-            ${takeaways
+            ${renderedTakeaways
               .map(
                 (takeaway) => `
                 <div class="modal-tip">
-                  <span class="tip-icon">💡</span>${escapeHTML(takeaway)}
+                  <span class="tip-icon">💡</span>
+                  <div class="markdown-content">${takeaway}</div>
                 </div>
               `
               )
               .join("")}
           </div>
-          <button class="modal-close">Close</button>
+          <div class="modal-footer">
+            <button class="copy-btn">Copy</button>
+            <button class="modal-close">Close</button>
+          </div>
         </div>
       `;
+    
+      // Add functionality to the copy button
+      modal.querySelector(".copy-btn")?.addEventListener("click", () => {
+        const plainTextTakeaways = takeaways.join("\n\n"); // Convert to plain text for copying
+        navigator.clipboard.writeText(plainTextTakeaways)
+          .then(() => {
+            showInAppNotification("Key takeaways copied to clipboard!");
+          })
+          .catch((error) => {
+            console.error("Failed to copy key takeaways:", error);
+            showInAppNotification("Failed to copy key takeaways.");
+          });
+      });
     
       // Add close functionality
       modal.querySelector(".modal-close")?.addEventListener("click", () => {
@@ -316,7 +338,7 @@ export default defineContentScript({
     
       // Append modal to body
       document.body.appendChild(modal);
-    }
+    }    
     
     function showInAppNotification(message: string) {
       const toast = document.createElement("div");

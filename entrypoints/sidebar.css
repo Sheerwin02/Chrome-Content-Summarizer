@@ -247,58 +247,109 @@
   left: 0;
   width: 100vw;
   height: 100vh;
-  background-color: rgba(0, 0, 0, 0.6);
+  background-color: rgba(0, 0, 0, 0.8); /* Dark translucent background */
   display: flex;
   justify-content: center;
   align-items: center;
   z-index: 10000;
+  animation: fadeIn 0.3s ease;
 }
 
 /* Modal content */
 .modal-content {
-  background: #fff;
-  padding: 20px;
-  border-radius: 8px;
-  max-width: 500px;
+  background: #1e1e1e; /* Slightly lighter dark for a clean look */
+  border-radius: 16px; /* Softer rounded corners for elegance */
+  padding: 30px;
   width: 90%;
-  text-align: center;
-  overflow-y: auto;
-  max-height: 80%;
-  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+  max-width: 600px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5); /* Stronger shadow for depth */
+  font-family: 'San Francisco', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  animation: slideUp 0.3s ease;
+  max-height: 80vh;
+  overflow-y: auto; /* Scroll if content overflows */
+  color: #f5f5f7; /* Light text for dark mode */
 }
 
-/* Modal takeaways */
+/* Modal title */
+.modal-content h3 {
+  font-size: 24px;
+  font-weight: bold;
+  color: #ffffff; /* White title for dark theme */
+  text-align: center;
+  margin-bottom: 20px;
+  border-bottom: 2px solid rgba(255, 255, 255, 0.1); /* Subtle separator */
+  padding-bottom: 10px;
+}
+
+/* Key takeaways container */
 .modal-takeaways {
-  margin-top: 10px;
+  margin-top: 20px;
   text-align: left;
-  font-size: 14px;
-  line-height: 1.6;
 }
 
 .modal-tip {
   display: flex;
   align-items: flex-start;
-  margin: 10px 0;
+  margin-bottom: 15px;
 }
 
 .tip-icon {
+  font-size: 24px;
   margin-right: 10px;
-  font-size: 18px;
+  color: #ffc107; /* Warm gold for the tip icon */
 }
 
-/* Close button */
+.markdown-content {
+  font-size: 16px;
+  line-height: 1.8; /* Increased for better readability */
+  color: #e5e5e5; /* Slightly lighter gray for clarity */
+}
+
 .modal-close {
-  margin-top: 15px;
+  flex: 1; /* Makes the buttons take equal space */
+  max-width: 200px; /* Optional: Limits the button width */
+  background-color: #ff0400;
+  color: #ffffff;
   padding: 10px 20px;
   border: none;
-  border-radius: 5px;
-  background-color: #007aff;
-  color: #fff;
+  border-radius: 20px;
+  font-size: 14px;
+  text-align: center;
   cursor: pointer;
+  transition: background-color 0.3s ease;
 }
 
+
 .modal-close:hover {
-  background-color: #005bb5;
+  background-color: #a01c0d; 
+  transform: scale(1.05);
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: center; /* Centers the buttons */
+  gap: 20px; /* Adds space between buttons */
+  margin-top: 20px;
+}
+
+
+/* Animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(20px);
+  }
+  to {
+    transform: translateY(0);
+  }
 }
 
 /* View Key Takeaways Button */
@@ -312,14 +363,14 @@
   font-weight: 500;
   cursor: pointer;
   text-align: center;
-  background: linear-gradient(135deg, #007aff, #0a84ff); /* Sleek gradient */
+  background: linear-gradient(135deg, #02cd05, #02c04e); /* Sleek gradient */
   color: #fff;
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); /* Soft shadow */
   transition: all 0.3s ease;
 }
 
 .view-takeaways-btn:hover {
-  background: linear-gradient(135deg, #005bb5, #007aff); /* Subtle darker gradient on hover */
+  background: linear-gradient(135deg, #0f9802c9, #087e2c); /* Subtle darker gradient on hover */
   transform: scale(1.05); /* Slight zoom effect */
   box-shadow: 0 6px 12px rgba(0, 0, 0, 0.2); /* More prominent shadow */
 }
