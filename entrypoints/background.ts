@@ -1,4 +1,4 @@
-const apiKey = import.meta.env.VITE_API_KEY_CCT as string;
+const apiKey = import.meta.env.VITE_API_KEY as string;
 let lastHighlightedText: string | null = null;
 
 export default defineBackground(() => {
