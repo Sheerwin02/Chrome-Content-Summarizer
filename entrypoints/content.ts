@@ -4,23 +4,60 @@ import { marked } from "marked";
 export default defineContentScript({
   matches: ["<all_urls>"],
   main() {
+    
+    let isDarkMode = true; // Default to dark mode
+
     console.log("Content script loaded.");
 
+    // createMinimizedIcon();
+  
+    // Initialize sidebar and minimized icon based on the stored state
+    chrome.storage.sync.get("sidebarVisible", (data) => {
+      const sidebarVisible = data.sidebarVisible ?? false; 
+      // Ensure sidebar is created regardless of visibility
+      let sidebar = document.getElementById("summarySidebar");
+      if (!sidebar) {
+        sidebar = createSidebar();
+        document.body.appendChild(sidebar);
+        console.log("Sidebar created during initialization.");
+      }
+
+      const minimizedIcon = document.getElementById("minimizedSidebarIcon");
+  
+      if (sidebarVisible) {
+        // Show the sidebar and hide the minimized icon
+        if (sidebar) {
+          sidebar.style.display = "flex";
+        }
+        if (minimizedIcon) {
+          minimizedIcon.style.display = "none";
+        }
+      } else {
+        // Hide the sidebar and ensure the minimized icon is visible
+        if (sidebar) {
+          sidebar.style.display = "none";
+        }
+        if (!minimizedIcon) {
+          createMinimizedIcon(); // Create the minimized icon if not already present
+        } else {
+          minimizedIcon.style.display = "flex";
+        }
+      }
+    });
+  
     chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       if (request.action === "displaySummary") {
         console.log("Received displaySummary message", request);
-    
+  
         // Store key takeaways in chrome storage for later access
         chrome.storage.sync.set({ lastTakeaways: request.takeaways }, () => {
           console.log("Key takeaways stored successfully.");
         });
-    
+  
         displaySummary(request.summary, request.takeaways, request.mode);
       }
     });
-    
 
-    let isDarkMode = true; // Default to dark mode
 
     async function displaySummary(summary: string, takeaways: string[], mode: string) {
       let sidebar = document.getElementById("summarySidebar");
@@ -34,29 +71,37 @@ export default defineContentScript({
     
       const contentArea = document.getElementById("summaryContent");
       if (contentArea) {
-        try {
-          // Render only the summary in the contentArea
-          const renderedContent = await marked.parse(summary);
-          contentArea.innerHTML = renderedContent;
+        contentArea.innerHTML = ""; // Clear existing content
     
-          contentArea.style.color = isDarkMode ? "#F0F0F0" : "#333"; // Update font color based on mode
-        } catch (error) {
-          console.error("Error rendering content:", error);
-          contentArea.innerHTML = `<p>${escapeHTML(summary)}</p>`;
+        if (summary.trim() === "") {
+          // Add placeholder if no summary is provided
+          contentArea.innerHTML = `
+            <div class="placeholder">
+              <p>No summary available yet. Highlight some text and summarize!</p>
+            </div>`;
+          console.log("Placeholder added to content area.");
+        } else {
+          try {
+            // Render summary content
+            const renderedContent = await marked.parse(summary);
+            contentArea.innerHTML = renderedContent;
+            contentArea.style.color = isDarkMode ? "#F0F0F0" : "#333"; // Update font color
+          } catch (error) {
+            console.error("Error rendering content:", error);
+            contentArea.innerHTML = `<p>${escapeHTML(summary)}</p>`;
+          }
         }
       }
     
-      // Store the key takeaways in Chrome storage for later use
       chrome.storage.sync.set({ lastTakeaways: takeaways }, () => {
         console.log("Key takeaways stored successfully.");
       });
     
-      // Update the mode indicator
       const modeIndicator = document.getElementById("modeIndicator");
       if (modeIndicator) {
         modeIndicator.innerText = `Current Mode: ${mode || "Not set"}`;
       }
-    }
+    }    
     
     function escapeHTML(str: string): string {
       const div = document.createElement("div");
@@ -65,20 +110,28 @@ export default defineContentScript({
     }    
     
     function createSidebar() {
+      console.log("Creating sidebar...");
       const sidebar = document.createElement("div");
       sidebar.id = "summarySidebar";
       sidebar.className = isDarkMode ? "dark-sidebar" : "light-sidebar";
-
+    
       const header = createSidebarHeader();
       const contentArea = createContentArea();
       const footer = createSidebarFooter();
-
+    
+      contentArea.innerHTML = `
+        <div class="placeholder">
+          <p>No summary available yet. Highlight some text and summarize!</p>
+        </div>`;
+    
       sidebar.appendChild(header);
       sidebar.appendChild(contentArea);
       sidebar.appendChild(footer);
-
+    
+      console.log("Sidebar created.");
       return sidebar;
     }
+    
 
     function createSidebarHeader() {
       const header = document.createElement("div");
@@ -159,17 +212,46 @@ export default defineContentScript({
     function toggleSidebar() {
       const sidebar = document.getElementById("summarySidebar");
       const minimizedIcon = document.getElementById("minimizedSidebarIcon");
-
+    
       if (sidebar) {
-        sidebar.style.display = "none";
-        if (!minimizedIcon) {
-          createMinimizedIcon();
+        const isSidebarVisible = sidebar.style.display !== "none";
+    
+        // Toggle visibility
+        if (isSidebarVisible) {
+          sidebar.style.display = "none";
+          if (!minimizedIcon) {
+            createMinimizedIcon();
+          } else {
+            minimizedIcon.style.display = "flex";
+          }
+          chrome.storage.sync.set({ sidebarVisible: false }, () => {
+            console.log("Sidebar hidden, minimized icon visible.");
+          });
         } else {
-          minimizedIcon.style.display = "flex";
+          sidebar.style.display = "flex";
+          if (minimizedIcon) {
+            minimizedIcon.style.display = "none";
+          }
+    
+          // Add placeholder if no content exists
+          const contentArea = document.getElementById("summaryContent");
+          if (contentArea && contentArea.innerHTML.trim() === "") {
+            contentArea.innerHTML = `
+              <div class="placeholder">
+                <p>No summary available yet. Highlight some text and summarize!</p>
+              </div>`;
+            console.log("Added placeholder during sidebar restoration.");
+          }
+    
+          chrome.storage.sync.set({ sidebarVisible: true }, () => {
+            console.log("Sidebar visible, minimized icon hidden.");
+          });
         }
+      } else {
+        console.error("Sidebar element not found.");
       }
-    }
-
+    }    
+    
     function createMinimizedIcon() {
       let minimizedIcon = document.getElementById("minimizedSidebarIcon");
     
@@ -181,7 +263,13 @@ export default defineContentScript({
     
         minimizedIcon.innerHTML = `<span style="font-size: 22px;">☰</span>`;
         minimizedIcon.onclick = () => restoreSidebar(); // Add restore behavior
-    
+
+        // Set initial position at the top-right corner
+        minimizedIcon.style.position = "fixed";
+        minimizedIcon.style.top = "10px";
+        minimizedIcon.style.right = "10px";
+        minimizedIcon.style.zIndex = "1000";
+
         document.body.appendChild(minimizedIcon);
     
         // Add drag-and-drop functionality
@@ -241,18 +329,29 @@ export default defineContentScript({
     
     
     function restoreSidebar() {
-      const sidebar = document.getElementById("summarySidebar");
-      const minimizedIcon = document.getElementById("minimizedSidebarIcon");
-    
-      if (sidebar) {
-        sidebar.style.display = "flex";
+      let sidebar = document.getElementById("summarySidebar");
+      if (!sidebar) {
+        console.warn("Sidebar not found during restoration. Creating sidebar.");
+        sidebar = createSidebar();
+        document.body.appendChild(sidebar);
       }
     
+      sidebar.style.display = "flex";
+    
+      const contentArea = document.getElementById("summaryContent");
+      if (contentArea && contentArea.innerHTML.trim() === "") {
+        contentArea.innerHTML = `
+          <div class="placeholder">
+            <p>No summary available yet. Highlight some text and summarize!</p>
+          </div>`;
+      }
+    
+      const minimizedIcon = document.getElementById("minimizedSidebarIcon");
       if (minimizedIcon) {
         minimizedIcon.style.display = "none";
       }
-    }
-
+    }      
+    
     function createContentArea() {
       const contentArea = document.createElement("div");
       contentArea.id = "summaryContent";

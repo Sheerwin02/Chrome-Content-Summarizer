@@ -463,3 +463,10 @@
   margin: 1em 0;
   font-style: italic;
 }
+
+.placeholder {
+  text-align: center;
+  margin-top: 20px;
+  font-style: italic;
+  color: #888;
+}
