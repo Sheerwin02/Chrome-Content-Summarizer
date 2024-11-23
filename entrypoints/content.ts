@@ -71,6 +71,7 @@ export default defineContentScript({
     
       const contentArea = document.getElementById("summaryContent");
       if (contentArea) {
+        showLoading(); // Show loading spinner while rendering content
         contentArea.innerHTML = ""; // Clear existing content
     
         if (summary.trim() === "") {
@@ -91,6 +92,8 @@ export default defineContentScript({
             contentArea.innerHTML = `<p>${escapeHTML(summary)}</p>`;
           }
         }
+        // Hide the loading spinner
+        hideLoading();        
       }
     
       chrome.storage.sync.set({ lastTakeaways: takeaways }, () => {
@@ -107,7 +110,21 @@ export default defineContentScript({
       const div = document.createElement("div");
       div.innerText = str;
       return div.innerHTML;
-    }    
+    }
+    
+    function getFullPageText() {
+      // Fetch all visible text from the body of the page
+      const bodyText = document.body.innerText || document.body.textContent || "";
+      return bodyText.trim();
+    }
+
+    function truncateText(text: string, maxLength = 10000) {
+      if (text.length > maxLength) {
+        console.warn(`Text length exceeds ${maxLength} characters. Truncating.`);
+        return text.slice(0, maxLength) + "...";
+      }
+      return text;
+    }
     
     function createSidebar() {
       console.log("Creating sidebar...");
@@ -118,6 +135,10 @@ export default defineContentScript({
       const header = createSidebarHeader();
       const contentArea = createContentArea();
       const footer = createSidebarFooter();
+
+      const spinner = document.createElement("div");
+      spinner.id = "loadingSpinner";
+      spinner.className = "loading-spinner";
     
       contentArea.innerHTML = `
         <div class="placeholder">
@@ -126,6 +147,7 @@ export default defineContentScript({
     
       sidebar.appendChild(header);
       sidebar.appendChild(contentArea);
+      sidebar.appendChild(spinner);
       sidebar.appendChild(footer);
     
       console.log("Sidebar created.");
@@ -411,20 +433,38 @@ export default defineContentScript({
     function regenerateSummary() {
       chrome.storage.sync.get(["summarizeMode", "lastHighlightedText"], (data) => {
         const mode = data.summarizeMode || "brief";
-        const textToSummarize = data.lastHighlightedText || "";
+        let textToSummarize = data.lastHighlightedText || "";
     
         if (!textToSummarize) {
-          showInAppNotification("No text available to regenerate the summary.");
-          return;
+          // Fetch full-page text if no highlighted text is available
+          textToSummarize = getFullPageText();
+          if (!textToSummarize) {
+            showInAppNotification("No text available to regenerate the summary.");
+            return;
+          }
+          console.log("Full page text fetched for summarization:", textToSummarize);
         }
     
+        // Truncate large text for API
+        textToSummarize = truncateText(textToSummarize);
+    
+        // Show the loading spinner
+        showLoading();
+    
+        // Send the text to the summarization service
         chrome.runtime.sendMessage(
           { command: "summarize", mode, text: textToSummarize },
           (response) => {
-            if (response.summary) {
-              displaySummary(response.summary, response.takeaways, mode);
-            } else if (response.error) {
+            hideLoading(); // Hide the spinner after receiving a response
+    
+            if (response?.summary) {
+              displaySummary(response.summary, response.takeaways || [], mode);
+            } else if (response?.error) {
+              console.error("Summarization failed:", response.error);
               showInAppNotification("Failed to regenerate summary");
+            } else {
+              console.error("Unexpected response:", response);
+              showInAppNotification("Unexpected error occurred.");
             }
           }
         );
@@ -509,5 +549,20 @@ export default defineContentScript({
         setTimeout(() => toast.remove(), 300);
       }, 3000);
     }
+
+    function showLoading() {
+      const spinner = document.getElementById("loadingSpinner");
+      if (spinner) {
+        spinner.classList.add("visible");
+      }
+    }
+    
+    function hideLoading() {
+      const spinner = document.getElementById("loadingSpinner");
+      if (spinner) {
+        spinner.classList.remove("visible");
+      }
+    }
+    
   },
 });
