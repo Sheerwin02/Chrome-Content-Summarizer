@@ -17,13 +17,13 @@ export default defineContentScript({
         sidebar = createSidebar();
         document.body.appendChild(sidebar);
       }
-    
+
       const contentArea = document.getElementById("summaryContent");
       if (contentArea) {
         contentArea.innerHTML = `<p>${summary}</p>`;
         contentArea.style.color = isDarkMode ? "#F0F0F0" : "#333"; // Update font color based on mode
       }
-    
+
       const modeIndicator = document.getElementById("modeIndicator");
       if (modeIndicator) {
         modeIndicator.innerText = `Current Mode: ${mode || "Not set"}`;
@@ -65,7 +65,9 @@ export default defineContentScript({
       const header = document.createElement("div");
       header.style.cssText = `
         padding: 15px 20px;
-        background-color: ${isDarkMode ? "rgba(255, 255, 255, 0.1)" : "rgba(255, 255, 255, 0.95)"};
+        background-color: ${
+          isDarkMode ? "rgba(255, 255, 255, 0.1)" : "rgba(255, 255, 255, 0.95)"
+        };
         border-bottom: 1px solid ${isDarkMode ? "#444" : "#DDD"};
         display: flex;
         justify-content: space-between;
@@ -98,7 +100,8 @@ export default defineContentScript({
       modes.forEach((mode) => {
         const option = document.createElement("option");
         option.value = mode;
-        option.textContent = mode.charAt(0).toUpperCase() + mode.slice(1).replace("_", " ");
+        option.textContent =
+          mode.charAt(0).toUpperCase() + mode.slice(1).replace("_", " ");
         modeSelector.appendChild(option);
       });
       chrome.storage.sync.get("summarizeMode", (data) => {
@@ -148,20 +151,20 @@ export default defineContentScript({
     function toggleTheme(themeToggleButton: HTMLButtonElement) {
       isDarkMode = !isDarkMode;
       themeToggleButton.innerHTML = isDarkMode ? "🌙" : "☀️";
-    
+
       const sidebar = document.getElementById("summarySidebar");
       const contentArea = document.getElementById("summaryContent");
-    
+
       if (sidebar) {
         sidebar.style.backgroundColor = isDarkMode ? "#1e1e1e" : "#F5F5F7";
         sidebar.style.borderLeftColor = isDarkMode ? "#333" : "#DDD";
       }
-      
+
       // Update contentArea color for dark/light mode
       if (contentArea) {
         contentArea.style.color = isDarkMode ? "#F0F0F0" : "#333";
       }
-    
+
       // Update the mode indicator and other elements to match the new theme
       const headerTitle = sidebar?.querySelector("h2");
       if (headerTitle) {
@@ -240,10 +243,40 @@ export default defineContentScript({
       footer.style.cssText = `
         padding: 15px;
         border-top: 1px solid ${isDarkMode ? "#444" : "#DDD"};
-        background-color: ${isDarkMode ? "rgba(255, 255, 255, 0.1)" : "rgba(255, 255, 255, 0.9)"};
+        background-color: ${
+          isDarkMode ? "rgba(255, 255, 255, 0.1)" : "rgba(255, 255, 255, 0.9)"
+        };
         display: flex;
         justify-content: space-around;
       `;
+
+      const uploadButton = document.createElement("button");
+      uploadButton.innerText = "Upload";
+      uploadButton.style.cssText = `
+        background-color: ${isDarkMode ? "#007AFF" : "#1A73E8"};
+        color: #fff;
+        border: none;
+        padding: 8px 16px;
+        font-size: 14px;
+        cursor: pointer;
+        border-radius: 12px;
+      `;
+      uploadButton.onclick = () => {
+        const input = document.createElement("input");
+        input.type = "file";
+        input.accept = ".txt,.pdf,.docx";
+        input.onchange = (event: Event) => {
+          console.log("File input triggered");
+          const target = event.target as HTMLInputElement;
+          if (target.files && target.files[0]) {
+            console.log("File selected:", target.files[0]);
+            uploadDocument(target.files[0]);
+          } else {
+            console.log("No file selected");
+          }
+        };
+        input.click();
+      };
 
       const copyButton = document.createElement("button");
       copyButton.innerText = "Copy";
@@ -271,6 +304,7 @@ export default defineContentScript({
       `;
       tryAgainButton.onclick = regenerateSummary;
 
+      footer.appendChild(uploadButton);
       footer.appendChild(copyButton);
       footer.appendChild(tryAgainButton);
 
@@ -281,24 +315,30 @@ export default defineContentScript({
       const contentArea = document.getElementById("summaryContent");
       if (contentArea) {
         const text = contentArea.innerText;
-        navigator.clipboard.writeText(text).then(() => {
-          showInAppNotification("Summary copied!");
-        }).catch((error) => {
-          console.error("Failed to copy text: ", error);
-        });
+        navigator.clipboard
+          .writeText(text)
+          .then(() => {
+            showInAppNotification("Summary copied!");
+          })
+          .catch((error) => {
+            console.error("Failed to copy text: ", error);
+          });
       }
     }
 
     function regenerateSummary() {
       chrome.storage.sync.get("summarizeMode", (data) => {
         const mode = data.summarizeMode || "brief";
-        chrome.runtime.sendMessage({ command: "summarize", mode }, (response) => {
-          if (response.summary) {
-            displaySummary(response.summary, mode);
-          } else if (response.error) {
-            showInAppNotification("Failed to regenerate summary");
+        chrome.runtime.sendMessage(
+          { command: "summarize", mode },
+          (response) => {
+            if (response.summary) {
+              displaySummary(response.summary, mode);
+            } else if (response.error) {
+              showInAppNotification("Failed to regenerate summary");
+            }
           }
-        });
+        );
       });
     }
 
@@ -322,8 +362,70 @@ export default defineContentScript({
 
       document.body.appendChild(toast);
 
-      setTimeout(() => { toast.style.opacity = "1"; }, 50);
-      setTimeout(() => { toast.style.opacity = "0"; setTimeout(() => toast.remove(), 300); }, 3000);
+      setTimeout(() => {
+        toast.style.opacity = "1";
+      }, 50);
+      setTimeout(() => {
+        toast.style.opacity = "0";
+        setTimeout(() => toast.remove(), 300);
+      }, 3000);
+    }
+
+    let isProcessing = false; // Flag to prevent multiple uploads
+
+    function uploadDocument(file: Blob) {
+      if (isProcessing) {
+        console.log("Upload already in progress.");
+        return; // Prevent further uploads if already processing
+      }
+
+      isProcessing = true; // Set flag to true when upload starts
+
+      const reader = new FileReader();
+
+      reader.onload = () => {
+        const base64Data = reader.result as string;
+
+        chrome.runtime.sendMessage(
+          {
+            action: "uploadDocument",
+            file: {
+              name: (file as File).name,
+              type: file.type || "application/pdf",
+              data: base64Data, // Send the complete data URL
+            },
+          },
+          (response) => {
+            console.log("Response from background:", response);
+            if (response && response.success && response.summary) {
+              displaySummary(response.summary, "uploaded");
+              showInAppNotification(
+                "Document uploaded and summarized successfully!"
+              );
+            } else if (response && !response.success) {
+              showInAppNotification(
+                `Error: ${response.error}. Please try again.`
+              );
+            } else {
+              showInAppNotification(
+                "Failed to process the document. Please try again."
+              );
+            }
+
+            // Ensure flag is reset only after processing is complete
+            isProcessing = false;
+          }
+        );
+      };
+
+      // Reset flag if reading the file fails
+      reader.onerror = () => {
+        console.log("Error reading file.");
+        isProcessing = false; // Reset flag if file reading fails
+      };
+
+      // Read file as Data URL (Base64)
+      reader.readAsDataURL(file);
     }
   },
 });
