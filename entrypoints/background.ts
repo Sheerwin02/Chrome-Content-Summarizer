@@ -1,7 +1,12 @@
+import { GoogleGenerativeAI } from "@google/generative-ai";
+import { handleFileUploadAndSummarize } from "../apis/fileHandler";
+
 const apiKey = import.meta.env.VITE_API_KEY as string;
+
 let lastHighlightedText: string | null = null;
 
 export default defineBackground(() => {
+  const genAI = new GoogleGenerativeAI(import.meta.env.VITE_API_KEY);
   console.log("Hello background!", { id: chrome.runtime.id });
 
   chrome.runtime.onInstalled.addListener(() => {
@@ -13,10 +18,14 @@ export default defineBackground(() => {
   });
 
   chrome.contextMenus.onClicked.addListener((info, tab) => {
-    if (info.menuItemId === "summarizeSelection" && info.selectionText && tab?.id) {
+    if (
+      info.menuItemId === "summarizeSelection" &&
+      info.selectionText &&
+      tab?.id
+    ) {
       lastHighlightedText = info.selectionText;
 
-      chrome.storage.sync.get(["summarizeMode"], (data) => {
+      chrome.storage.sync.get(["summarizeMode"], async (data) => {
         const mode = data.summarizeMode || "brief";
         const textToSummarize = lastHighlightedText || "";
 
@@ -28,9 +37,13 @@ export default defineBackground(() => {
           () => {
             summarizeText(textToSummarize, mode)
               .then((summary) => {
-                chrome.tabs.sendMessage(tab.id!, { action: "displaySummary", summary, mode });
+                chrome.tabs.sendMessage(tab.id!, {
+                  action: "displaySummary",
+                  summary,
+                  mode,
+                });
               })
-              .catch((error) => {
+              .catch((error: unknown) => {
                 console.error("Error summarizing text:", error);
               });
           }
@@ -39,59 +52,126 @@ export default defineBackground(() => {
     }
   });
 
+  // Single message listener for all message types
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    if (message.command === "summarize") {
-      const textToSummarize = lastHighlightedText || message.text;
+    // Track whether we've handled the response
+    let responseHandled = false;
 
-      chrome.storage.sync.get(["summarizeMode"], (data) => {
-        const mode = data.summarizeMode || "brief";
-        summarizeText(textToSummarize, mode)
-          .then((summary) => {
-            sendResponse({ summary });
-          })
-          .catch((error) => {
-            console.error("Error:", error);
-            sendResponse({ error: "Failed to summarize text" });
-          });
-      });
-
-      return true; // Keeps the message channel open for async response
-    }
-
-    if (message.action === "summarizeFullPage") {
-      // Handle full-page summarization
-      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-        const activeTab = tabs[0];
-        if (activeTab?.id) {
-          chrome.scripting.executeScript(
-            {
-              target: { tabId: activeTab.id },
-              func: () => document.body.innerText, // Retrieves the entire page text content
-            },
-            (results) => {
-              const fullPageText = results[0].result;
-              chrome.storage.sync.get(["summarizeMode"], (data) => {
-                const mode = data.summarizeMode || "brief";
-                // TODO: Make sure there's a string passed in before calling summarizeText
-                summarizeText(fullPageText || "", mode)
-                  .then((summary) => {
-                    chrome.tabs.sendMessage(activeTab.id!, { action: "displaySummary", summary, mode });
-                    sendResponse({ success: true });
-                  })
-                  .catch((error) => {
-                    console.error("Error summarizing full page:", error);
-                    sendResponse({ success: false, error: "Failed to summarize full page" });
-                  });
-              });
-            }
-          );
+    switch (message.action) {
+      case "uploadDocument":
+        if (message.file) {
+          console.log("File received in background:", message.file.name);
+          handleFileUploadAndSummarize(message.file, apiKey)
+            .then((summary) => {
+              if (!responseHandled) {
+                sendResponse({ success: true, summary });
+                responseHandled = true;
+              }
+            })
+            .catch((error) => {
+              if (!responseHandled) {
+                console.error("Error processing file:", error);
+                sendResponse({ success: false, error: error.message });
+                responseHandled = true;
+              }
+            });
         }
-      });
-      return true; // Keeps the message channel open for async response
+        break;
+
+      case "summarize":
+        const textToSummarize = lastHighlightedText || message.text;
+        if (textToSummarize) {
+          handleSummarizeRequest(sender.tab?.id, textToSummarize, sendResponse);
+        }
+        break;
+
+      case "summarizeFullPage":
+        handleFullPageSummarization(sender, sendResponse);
+        break;
     }
+
+    // Return true to indicate we'll send a response asynchronously
+    return true;
   });
 
-  async function summarizeText(selectedText: string, mode: string): Promise<string> {
+  async function handleSummarizeRequest(
+    tabId: number | undefined,
+    text: string,
+    sendResponse?: (response: any) => void
+  ) {
+    try {
+      const { summarizeMode } = await chrome.storage.sync.get("summarizeMode");
+      const mode = summarizeMode || "brief";
+      const summary = await summarizeText(text, mode);
+
+      if (tabId) {
+        await chrome.scripting.executeScript({
+          target: { tabId },
+          files: ["content-scripts/content.js"],
+        });
+
+        chrome.tabs.sendMessage(tabId, {
+          action: "displaySummary",
+          summary,
+          mode,
+        });
+      }
+
+      if (sendResponse) {
+        sendResponse({ summary });
+      }
+    } catch (error) {
+      console.error("Error in handleSummarizeRequest:", error);
+      if (sendResponse) {
+        sendResponse({ error: "Failed to summarize text" });
+      }
+    }
+  }
+
+  async function handleFullPageSummarization(
+    sender: any,
+    sendResponse: (response: any) => void
+  ) {
+    try {
+      const activeTab = await chrome.tabs.query({
+        active: true,
+        currentWindow: true,
+      });
+      if (activeTab[0]?.id) {
+        const results = await chrome.scripting.executeScript({
+          target: { tabId: activeTab[0].id },
+          func: () => document.body.innerText,
+        });
+
+        const fullPageText = results[0].result;
+        const { summarizeMode } = await chrome.storage.sync.get([
+          "summarizeMode",
+        ]);
+        const mode = summarizeMode || "brief";
+
+        if (fullPageText) {
+          const summary = await summarizeText(fullPageText, mode);
+          chrome.tabs.sendMessage(activeTab[0].id, {
+            action: "displaySummary",
+            summary,
+            mode,
+          });
+          sendResponse({ success: true });
+        }
+      }
+    } catch (error) {
+      console.error("Error summarizing full page:", error);
+      sendResponse({
+        success: false,
+        error: "Failed to summarize full page",
+      });
+    }
+  }
+
+  async function summarizeText(
+    selectedText: string,
+    mode: string
+  ): Promise<string> {
     const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
 
     let promptText = "";
@@ -163,4 +243,8 @@ export default defineBackground(() => {
       throw error;
     }
   }
+
+  return {
+    summarizeText,
+  };
 });
