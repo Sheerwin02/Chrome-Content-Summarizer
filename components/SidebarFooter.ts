@@ -2,6 +2,7 @@ import { copySummaryToClipboard } from "@/utils/helpers";
 import { showKeyTakeawaysModal } from "./PromptModal";
 import { showInAppNotification } from "@/utils/notifications";
 import { regenerateSummary } from "@/utils/summary";
+import { uploadDocument } from "@/utils/upload";
 import "./sidebar.css";
 
 let isDarkMode = true; // Default to dark mode
@@ -19,6 +20,25 @@ export function createSidebarFooter() {
     tryAgainButton.className = "try-again-btn";
     tryAgainButton.innerText = "Try Again";
     tryAgainButton.onclick = regenerateSummary;
+
+    const uploadButton = document.createElement("button");
+      uploadButton.innerText = "+";
+      uploadButton.onclick = () => {
+        const input = document.createElement("input");
+        input.type = "file";
+        input.accept = ".txt,.pdf,.docx";
+        input.onchange = (event: Event) => {
+          console.log("File input triggered");
+          const target = event.target as HTMLInputElement;
+          if (target.files && target.files[0]) {
+            console.log("File selected:", target.files[0]);
+            uploadDocument(target.files[0]);
+          } else {
+            console.log("No file selected");
+          }
+        };
+        input.click();
+      };
   
     const viewTakeawaysButton = document.createElement("button");
     viewTakeawaysButton.className = "view-takeaways-btn";
