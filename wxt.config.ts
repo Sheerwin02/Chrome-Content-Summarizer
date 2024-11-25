@@ -20,7 +20,8 @@ export default defineConfig({
     content_scripts: [
       {
         matches: ["<all_urls>"], // Specify the URLs where the content script should run
-        js: ["content-scripts/content.js"] // Adjust this path based on the actual output location
+        js: ["content-scripts/content.js"], // Adjust this path based on the actual output location
+        run_at: "document_idle"
       }
     ]
   }
