@@ -16,11 +16,9 @@
   },
   "dependencies": {
     "@google/generative-ai": "^0.21.0",
+    "@types/marked": "^6.0.0",
     "dotenv": "^16.4.5",
-    "envfile": "^7.1.0",
-    "express": "^4.21.1",
-    "mime-types": "^2.1.35",
-    "pdfjs-dist": "^4.8.69",
+    "marked": "^15.0.2",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "vite-plugin-crx": "^0.0.0-beta.0"
