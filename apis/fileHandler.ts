@@ -1,15 +1,19 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { summarizeText } from "./summarize";
 
-// Use a module-level listener cleanup function
-let cleanupListener: (() => void) | null = null;
+interface FileState {
+  content: string;
+  mimeType: string;
+  isProcessing?: boolean;
+}
+
+let currentFileState: FileState | null = null;
 
 export async function handleFileUploadAndSummarize(
   file: File | { name: string; type: string; data: string },
   apiKey: string
-) {
+): Promise<{ summary: string; takeaways: string[] }> {
   const genAI = new GoogleGenerativeAI(apiKey);
-  let currentBase64Content: string;
-  let currentMimeType: string;
 
   try {
     console.log(
@@ -17,120 +21,139 @@ export async function handleFileUploadAndSummarize(
       typeof file === "string" ? "base64 string" : file.name
     );
 
-    // Process the file and get content
+    // Store file state
     if (file instanceof File) {
-      currentMimeType = file.type || "application/pdf";
-      currentBase64Content = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => {
-          const result = reader.result as string;
-          const base64 = result.split(",")[1];
-          resolve(base64);
-        };
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
+      currentFileState = {
+        mimeType: file.type || "application/pdf",
+        content: await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => {
+            const result = reader.result as string;
+            const base64 = result.split(",")[1];
+            resolve(base64);
+          };
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        }),
+        isProcessing: false,
+      };
     } else {
-      currentMimeType = file.type;
-      currentBase64Content = file.data.includes(",")
-        ? file.data.split(",")[1]
-        : file.data;
+      currentFileState = {
+        mimeType: file.type,
+        content: file.data.includes(",") ? file.data.split(",")[1] : file.data,
+        isProcessing: false,
+      };
     }
 
-    if (!currentBase64Content) {
-      throw new Error("Failed to get file content");
-    }
+    // Store current file state in chrome storage
+    await chrome.storage.local.set({ currentFileState });
 
-    // Validate PDF if applicable
-    if (currentMimeType === "application/pdf") {
-      try {
-        const decodedStart = atob(currentBase64Content.substring(0, 100));
-        if (!decodedStart.includes("%PDF-")) {
-          throw new Error("Invalid PDF format: Missing PDF header");
-        }
-      } catch (e) {
-        throw new Error("Invalid base64 encoding or corrupted PDF data");
-      }
-    }
-
-    // Clean up any existing listener
-    if (cleanupListener) {
-      cleanupListener();
-      cleanupListener = null;
-    }
-
-    // Set up new listener with cleanup
-    const handleModeChange = (
-      changes: { [key: string]: chrome.storage.StorageChange },
-      areaName: string
-    ) => {
-      if (areaName === "sync" && changes.summarizeMode) {
-        const newMode = changes.summarizeMode.newValue || "brief";
-        console.log("Summarize mode changed:", newMode);
-        regenerateSummary(newMode);
-      }
-    };
-
-    chrome.storage.onChanged.addListener(handleModeChange);
-
-    // Store cleanup function
-    cleanupListener = () => {
-      chrome.storage.onChanged.removeListener(handleModeChange);
-    };
-
-    // Get initial mode and generate summary
-    const summarizeMode = await new Promise<string>((resolve) => {
-      chrome.storage.sync.get(["summarizeMode"], (data) => {
-        resolve(data.summarizeMode || "brief");
-      });
-    });
-
-    return regenerateSummary(summarizeMode);
-
-    async function regenerateSummary(mode: string): Promise<string> {
-      const promptText =
-        mode === "detailed"
-          ? "Provide a detailed summary of the attached document with all necessary context and explanations."
-          : mode === "bullet_points"
-          ? "Create a bullet-point summary of the attached document."
-          : "Summarize the attached document in a brief and concise manner.";
-
-      const parts = [
-        {
-          inlineData: {
-            mimeType: currentMimeType,
-            data: currentBase64Content,
-          },
-        },
-        { text: promptText },
-      ];
-
-      const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-      const result = await model.generateContent(parts);
-      const response = await result.response;
-
-      if (!response.text()) {
-        throw new Error("Received empty response from the API");
-      }
-
-      // Send summary to active tab
-      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-        const activeTab = tabs[0];
-        if (activeTab?.id) {
-          chrome.tabs.sendMessage(activeTab.id, {
-            action: "displaySummary",
-            summary: response.text(),
-            mode,
-          });
-        }
-      });
-
-      return response.text();
-    }
+    // Initial summary generation
+    const { summarizeMode } = await chrome.storage.sync.get("summarizeMode");
+    return regenerateSummary(summarizeMode || "brief", genAI);
   } catch (error) {
     const errorMessage =
       error instanceof Error ? error.message : "Unknown error";
     console.error("Error processing file:", errorMessage);
     throw new Error(`Error processing document: ${errorMessage}`);
   }
+}
+
+async function regenerateSummary(
+  mode: string,
+  genAI: any
+): Promise<{ summary: string; takeaways: string[] }> {
+  if (!currentFileState || currentFileState.isProcessing) {
+    throw new Error("No file content available or processing in progress");
+  }
+
+  currentFileState.isProcessing = true;
+
+  try {
+    let promptText = "";
+    if (mode === "customize") {
+      const { customPrompt } = await chrome.storage.sync.get("customPrompt");
+      promptText = customPrompt?.trim()
+        ? `${customPrompt.trim()}\nAnalyze the document and provide:\n1. A clear summary\n2. Key takeaways as bullet points`
+        : "Analyze this document and provide:\n1. A clear summary\n2. Key takeaways as bullet points";
+    } else {
+      promptText =
+        mode === "detailed"
+          ? "Provide a detailed analysis of the document with:\n1. A comprehensive summary\n2. Key takeaways as bullet points"
+          : mode === "bullet_points"
+          ? "Create a bullet-point analysis with:\n1. Main points\n2. Key takeaways as separate bullet points"
+          : "Provide a concise analysis with:\n1. A brief summary\n2. Key takeaways as bullet points";
+    }
+
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+
+    const result = await model.generateContent({
+      contents: [
+        {
+          role: "user",
+          parts: [
+            {
+              inlineData: {
+                mimeType: currentFileState.mimeType,
+                data: currentFileState.content,
+              },
+            },
+            {
+              text: promptText,
+            },
+          ],
+        },
+      ],
+    });
+
+    const response = await result.response;
+    const rawOutput = response.text();
+
+    if (!rawOutput) {
+      throw new Error("Received empty response from API");
+    }
+
+    // Process the output
+    const lines = rawOutput.split("\n");
+    const takeaways: string[] = [];
+    const summaryLines: string[] = [];
+
+    let isTakeaway = false;
+
+    for (const line of lines) {
+      const trimmedLine = line.trim();
+      if (
+        trimmedLine.toLowerCase().includes("key takeaway") ||
+        trimmedLine.match(/^[•\-\*]|^\d+\./) ||
+        isTakeaway
+      ) {
+        isTakeaway = true;
+        if (
+          trimmedLine &&
+          !trimmedLine.toLowerCase().includes("key takeaway")
+        ) {
+          takeaways.push(trimmedLine.replace(/^[•\-\*]\s*|\d+\.\s*/, ""));
+        }
+      } else {
+        summaryLines.push(trimmedLine);
+      }
+    }
+
+    const summary = summaryLines.join("\n").trim();
+    return { summary, takeaways };
+  } catch (error) {
+    console.error("Error in regenerateSummary:", error);
+    throw error;
+  } finally {
+    currentFileState.isProcessing = false;
+  }
+}
+
+export function getCurrentFileState(): FileState | null {
+  return currentFileState;
+}
+
+export function clearFileState(): void {
+  currentFileState = null;
+  chrome.storage.local.remove("currentFileState");
 }
