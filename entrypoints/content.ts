@@ -93,5 +93,32 @@ export default defineContentScript({
 
       return true; // Keep the message channel open for async responses
     });
+
+    chrome.runtime.onConnect.addListener((port) => {
+      if (port.name === "modeSwitchPort") {
+        port.onMessage.addListener((message) => {
+          switch (message.action) {
+            case "showLoading":
+              showLoading();
+              break;
+            case "hideLoading":
+              hideLoading();
+              break;
+            case "displaySummary":
+              displaySummary(message.summary, message.takeaways, message.mode);
+              break;
+            case "displayError":
+              // Implement error display in your UI
+              console.error(message.error);
+              // You might want to show this error in the UI
+              break;
+            case "processingUpdate":
+              // Optional: Update UI with processing status
+              console.log(message.status);
+              break;
+          }
+        });
+      }
+    });
   },
 });

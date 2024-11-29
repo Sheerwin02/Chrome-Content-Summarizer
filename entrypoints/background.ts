@@ -1,5 +1,12 @@
-import { summarizeText } from "../apis/summarize";
+import { summarizeText, summarizeFullPage } from "../apis/summarize";
 import { handleFileUploadAndSummarize } from "../apis/fileHandler";
+import { summarizeDoc } from "@/apis/summarize";
+import {
+  ensureContentScriptLoaded,
+  handleSelectionSummarize,
+  updateActiveTab,
+} from "@/utils/handle";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
 interface ContentState {
   type: "text" | "document" | null;
@@ -19,9 +26,31 @@ let currentState: ContentState = {
 };
 
 const apiKey = import.meta.env.VITE_API_KEY as string;
+let genAI: GoogleGenerativeAI | null = null;
+
+// Initialize AI model
+async function initializeAIModel() {
+  try {
+    console.log("Initializing Google Generative AI...");
+    if (!apiKey) {
+      throw new Error("API key not found");
+    }
+    genAI = new GoogleGenerativeAI(apiKey);
+    console.log("AI model initialized successfully");
+    return true;
+  } catch (error) {
+    console.error("Failed to initialize AI model:", error);
+    return false;
+  }
+}
 
 export default defineBackground(() => {
-  console.log("Hello background!", { id: chrome.runtime.id });
+  console.log("Background script starting...", { id: chrome.runtime.id });
+
+  // Initialize AI model on startup
+  initializeAIModel().then((success) => {
+    console.log("AI initialization result:", success);
+  });
 
   // Context menu setup
   chrome.runtime.onInstalled.addListener(() => {
@@ -42,6 +71,11 @@ export default defineBackground(() => {
   chrome.contextMenus.onClicked.addListener((info, tab) => {
     if (!tab?.id) return;
 
+    if (!genAI) {
+      console.error("AI model not initialized");
+      return;
+    }
+
     clearPreviousContent();
 
     if (info.menuItemId === "summarizeSelection" && info.selectionText) {
@@ -57,326 +91,251 @@ export default defineBackground(() => {
     }
   });
 
-  // Message listener
+  // Message listener with AI initialization check
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     console.log("Received message:", message);
 
-    switch (message.action) {
-      case "uploadDocument":
-        if (message.file && !currentState.isProcessing) {
-          clearPreviousContent();
-
-          currentState = {
-            type: "document",
-            content: message.file,
-            isProcessing: true,
-          };
-
-          handleFileUploadAndSummarize(message.file, apiKey)
-            .then(({ summary, takeaways }) => {
-              const mode = "brief";
-              currentState.lastSummary = { summary, takeaways, mode };
-              currentState.isProcessing = false;
-              console.log("Document processed successfully");
-              sendResponse({
-                success: true,
-                summary,
-                takeaways,
-                isDocument: true,
-              });
-            })
-            .catch((error) => {
-              currentState.isProcessing = false;
-              console.error("Error processing document:", error);
-              sendResponse({
-                success: false,
-                error: error.message,
-              });
-            });
+    if (!genAI) {
+      console.log("AI not initialized, attempting to initialize...");
+      initializeAIModel().then((success) => {
+        if (!success) {
+          sendResponse({ error: "Failed to initialize AI model" });
+        } else {
+          handleMessage(message, sender, sendResponse);
         }
-        break;
+      });
+      return true;
+    }
 
-      case "summarize":
-        if (!currentState.isProcessing) {
-          clearPreviousContent();
+    return handleMessage(message, sender, sendResponse);
+  });
 
-          const textToSummarize = message.text;
-          if (textToSummarize) {
-            currentState = {
-              type: "text",
-              content: textToSummarize,
-              isProcessing: true,
+  function handleMessage(message: any, sender: any, sendResponse: any) {
+    switch (message.action) {
+      case "checkModelStatus":
+        sendResponse({ initialized: !!genAI });
+        return true;
+
+      case "summarize": {
+        console.log("Handling summarize action:", message);
+
+        const { text, mode } = message;
+        if (!text) {
+          console.error("No text provided for summarization");
+          sendResponse({ error: "No text provided" });
+          return true;
+        }
+
+        // Using the summarizeText function from summarize.ts
+        (async () => {
+          try {
+            const result = await summarizeText(text, mode || "brief");
+            console.log("Summarization result:", result);
+            sendResponse({
+              summary: result.summary,
+              takeaways: result.takeaways,
+            });
+          } catch (error) {
+            console.error("Summarization error:", error);
+            sendResponse({
+              error:
+                error instanceof Error
+                  ? error.message
+                  : "Failed to summarize text",
+            });
+          }
+        })();
+
+        return true; // Keep the message channel open for async response
+      }
+
+      case "summarizeDocument": {
+        if (!genAI) {
+          sendResponse({ error: "AI model not initialized" });
+          return true;
+        }
+
+        const { mode, fileState } = message;
+
+        if (!fileState) {
+          sendResponse({ error: "No document state provided" });
+          return true;
+        }
+
+        (async () => {
+          try {
+            const result = await summarizeDoc(mode, genAI);
+            sendResponse({
+              summary: result.summary,
+              takeaways: result.takeaways,
+            });
+          } catch (error) {
+            console.error("Document summarization error:", error);
+            sendResponse({
+              error:
+                error instanceof Error
+                  ? error.message
+                  : "Failed to summarize document",
+            });
+          }
+        })();
+
+        return true;
+      }
+
+      case "uploadDocument": {
+        if (!genAI) {
+          sendResponse({ success: false, error: "AI model not initialized" });
+          return true;
+        }
+
+        if (!message.file || !message.file.data) {
+          sendResponse({
+            success: false,
+            error: "No valid file data provided",
+          });
+          return true;
+        }
+
+        // Using an async IIFE to handle the file upload
+        (async () => {
+          try {
+            const fileData = {
+              name: message.file.name,
+              type: message.file.type,
+              data: message.file.data,
             };
 
-            chrome.storage.sync.get(["summarizeMode"], async (data) => {
-              try {
-                const mode = data.summarizeMode || "brief";
-                const { summary, takeaways } = await summarizeText(
-                  textToSummarize,
-                  mode
-                );
-                currentState.lastSummary = { summary, takeaways, mode };
-                currentState.isProcessing = false;
-                sendResponse({ summary, takeaways, isDocument: false });
-              } catch (error) {
-                currentState.isProcessing = false;
-                console.error("Error:", error);
-                sendResponse({ error: "Failed to summarize text" });
+            currentState = {
+              type: "document",
+              content: fileData,
+              isProcessing: false,
+            };
+
+            const result = await handleFileUploadAndSummarize(
+              fileData,
+              apiKey,
+              (progress) => {
+                console.log("Upload progress:", progress);
               }
+            );
+
+            currentState.lastSummary = {
+              summary: result.summary,
+              takeaways: result.takeaways,
+              mode: "brief",
+            };
+
+            sendResponse({
+              success: true,
+              summary: result.summary,
+              takeaways: result.takeaways,
             });
-          } else {
-            sendResponse({ error: "No text to summarize" });
+          } catch (error) {
+            console.error("Upload error:", error);
+            currentState = {
+              type: null,
+              content: null,
+              isProcessing: false,
+            };
+            sendResponse({
+              success: false,
+              error: error instanceof Error ? error.message : "Unknown error",
+            });
           }
-        }
-        break;
+        })();
 
-      case "summarizeFullPage":
-        if (sender.tab?.id) {
-          clearPreviousContent();
-          currentState.type = "text";
-          summarizeFullPage(sender.tab.id)
-            .then(() => sendResponse({ success: true }))
-            .catch((error) => {
-              console.error("Error summarizing full page:", error);
-              sendResponse({
-                success: false,
-                error: "Failed to summarize full page",
-              });
-            });
-        }
-        break;
-
-      case "clearContent":
-        clearPreviousContent();
-        sendResponse({ success: true });
-        break;
-
-      default:
-        sendResponse({ error: "Unknown action" });
-        break;
-    }
-
-    return true; // Keep the message channel open for async responses
-  });
-
-  function clearPreviousContent() {
-    currentState = {
-      type: null,
-      content: null,
-      isProcessing: false,
-    };
-
-    chrome.storage.local.remove("currentFileState");
-
-    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-      const activeTab = tabs[0];
-      if (activeTab?.id) {
-        chrome.tabs.sendMessage(activeTab.id, { action: "clearSummary" });
+        return true;
       }
-    });
+    }
   }
 
-  // Mode change listener with debouncing
+  // Mode change listener with AI check
   let modeChangeTimeout: NodeJS.Timeout | null = null;
+
   chrome.storage.onChanged.addListener((changes) => {
-    if (
-      (changes.summarizeMode || changes.customPrompt) &&
-      currentState.type &&
-      !currentState.isProcessing
-    ) {
-      // Clear any pending timeout
+    if (!genAI) {
+      console.error("Cannot process mode change: AI model not initialized");
+      return;
+    }
+
+    if (changes.summarizeMode || changes.customPrompt) {
       if (modeChangeTimeout) {
         clearTimeout(modeChangeTimeout);
       }
 
-      // Set a new timeout to debounce multiple rapid changes
       modeChangeTimeout = setTimeout(() => {
-        chrome.storage.sync.get(
-          ["summarizeMode", "customPrompt"],
-          async (data) => {
-            const mode = data.summarizeMode || "brief";
+        let port: chrome.runtime.Port | null = null;
 
-            try {
-              currentState.isProcessing = true;
-
-              if (currentState.type === "document" && currentState.content) {
-                console.log("Regenerating document summary");
-                const { summary, takeaways } =
-                  await handleFileUploadAndSummarize(
-                    currentState.content,
-                    apiKey
-                  );
-                currentState.lastSummary = { summary, takeaways, mode };
-                updateActiveTab(summary, takeaways, mode, true);
-              } else if (currentState.type === "text" && currentState.content) {
-                console.log("Regenerating text summary");
-                const { summary, takeaways } = await summarizeText(
-                  currentState.content,
-                  mode
-                );
-                currentState.lastSummary = { summary, takeaways, mode };
-                updateActiveTab(summary, takeaways, mode, false);
-              }
-
-              currentState.isProcessing = false;
-            } catch (error) {
-              currentState.isProcessing = false;
-              console.error("Error regenerating content:", error);
-            }
-          }
-        );
-      }, 300); // 300ms debounce delay
-    }
-  });
-
-  // Reset state when tab changes or closes
-  chrome.tabs.onActivated.addListener(clearPreviousContent);
-  chrome.tabs.onRemoved.addListener(clearPreviousContent);
-
-  async function ensureContentScriptLoaded(tabId: number): Promise<void> {
-    try {
-      // Check if content script is already loaded
-      await chrome.tabs.sendMessage(tabId, { action: "ping" });
-    } catch (error) {
-      // If not loaded, inject the content script
-      await chrome.scripting.executeScript({
-        target: { tabId },
-        files: ["content-scripts/content.js"],
-      });
-
-      // Wait a bit for the script to initialize
-      await new Promise((resolve) => setTimeout(resolve, 100));
-    }
-  }
-
-  async function updateActiveTab(
-    summary: string,
-    takeaways: string[],
-    mode: string,
-    isDocument: boolean
-  ) {
-    try {
-      const [activeTab] = await chrome.tabs.query({
-        active: true,
-        currentWindow: true,
-      });
-
-      if (activeTab?.id) {
-        await ensureContentScriptLoaded(activeTab.id);
-
-        await chrome.tabs.sendMessage(activeTab.id, {
-          action: "displaySummary",
-          summary,
-          takeaways,
-          mode,
-          isDocument,
-        });
-      }
-    } catch (error) {
-      console.error("Error updating active tab:", error);
-    }
-  }
-
-  // Mode change listener with debouncing
-  chrome.storage.onChanged.addListener((changes) => {
-    if (
-      (changes.summarizeMode || changes.customPrompt) &&
-      currentState.type &&
-      !currentState.isProcessing
-    ) {
-      if (modeChangeTimeout) {
-        clearTimeout(modeChangeTimeout);
-      }
-
-      modeChangeTimeout = setTimeout(async () => {
-        try {
-          const [activeTab] = await chrome.tabs.query({
-            active: true,
-            currentWindow: true,
-          });
-
+        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+          const activeTab = tabs[0];
           if (!activeTab?.id) return;
 
-          // Ensure content script is loaded before proceeding
-          await ensureContentScriptLoaded(activeTab.id);
+          port = chrome.tabs.connect(activeTab.id, { name: "modeSwitchPort" });
+          port.postMessage({ action: "showLoading" });
 
-          const { summarizeMode, customPrompt } = await chrome.storage.sync.get(
-            ["summarizeMode", "customPrompt"]
-          );
+          (async () => {
+            try {
+              const { summarizeMode } = await chrome.storage.sync.get(
+                "summarizeMode"
+              );
+              const mode = summarizeMode || "brief";
 
-          const mode = summarizeMode || "brief";
+              let result;
+              if (currentState.type === "document" && currentState.content) {
+                if (!genAI) {
+                  throw new Error("AI model not initialized");
+                }
 
-          currentState.isProcessing = true;
+                const fileState = await chrome.storage.local.get(
+                  "currentFileState"
+                );
+                if (!fileState.currentFileState) {
+                  throw new Error("No file state available");
+                }
 
-          if (currentState.type === "document" && currentState.content) {
-            console.log("Regenerating document summary");
-            const { summary, takeaways } = await handleFileUploadAndSummarize(
-              currentState.content,
-              apiKey
-            );
-            currentState.lastSummary = { summary, takeaways, mode };
-            await updateActiveTab(summary, takeaways, mode, true);
-          } else if (currentState.type === "text" && currentState.content) {
-            console.log("Regenerating text summary");
-            const { summary, takeaways } = await summarizeText(
-              currentState.content,
-              mode
-            );
-            currentState.lastSummary = { summary, takeaways, mode };
-            await updateActiveTab(summary, takeaways, mode, false);
-          }
-        } catch (error) {
-          console.error("Error in mode change handler:", error);
-        } finally {
-          currentState.isProcessing = false;
-        }
+                port.postMessage({
+                  action: "processingUpdate",
+                  status: "Regenerating summary...",
+                });
+
+                result = await summarizeDoc(mode, genAI);
+              } else if (currentState.type === "text" && currentState.content) {
+                result = await summarizeText(currentState.content, mode);
+              } else {
+                throw new Error("No content available to regenerate");
+              }
+
+              if (result) {
+                currentState.lastSummary = { ...result, mode };
+                port.postMessage({
+                  action: "displaySummary",
+                  summary: result.summary,
+                  takeaways: result.takeaways,
+                  mode: mode,
+                  isDocument: currentState.type === "document",
+                });
+              }
+            } catch (error) {
+              console.error("Error in mode change handler:", error);
+              port?.postMessage({
+                action: "displayError",
+                error:
+                  error instanceof Error
+                    ? error.message
+                    : "Failed to regenerate summary",
+              });
+            } finally {
+              port?.postMessage({ action: "hideLoading" });
+              setTimeout(() => {
+                if (port) {
+                  port.disconnect();
+                }
+              }, 100);
+            }
+          })();
+        });
       }, 300);
     }
   });
-
-  async function handleSelectionSummarize(tabId: number, text: string) {
-    try {
-      await ensureContentScriptLoaded(tabId);
-
-      const { summarizeMode } = await chrome.storage.sync.get("summarizeMode");
-      const mode = summarizeMode || "brief";
-      const { summary, takeaways } = await summarizeText(text, mode);
-
-      currentState.lastSummary = { summary, takeaways, mode };
-      await updateActiveTab(summary, takeaways, mode, false);
-    } catch (error) {
-      console.error("Error in handleSelectionSummarize:", error);
-    }
-  }
-
-  async function summarizeFullPage(tabId: number): Promise<void> {
-    try {
-      await ensureContentScriptLoaded(tabId);
-
-      const results = await chrome.scripting.executeScript({
-        target: { tabId },
-        func: () => document.body.innerText,
-      });
-
-      const fullPageText = results[0]?.result;
-      if (!fullPageText?.trim()) {
-        throw new Error("Failed to retrieve full page text.");
-      }
-
-      currentState.content = fullPageText;
-      const { summarizeMode, customPrompt } = await chrome.storage.sync.get([
-        "summarizeMode",
-        "customPrompt",
-      ]);
-
-      const mode = summarizeMode || "brief";
-      const { summary, takeaways } = await summarizeText(fullPageText, mode);
-
-      currentState.lastSummary = { summary, takeaways, mode };
-      await updateActiveTab(summary, takeaways, mode, false);
-    } catch (error) {
-      console.error("Error in summarizeFullPage:", error);
-      throw error;
-    }
-  }
 });
