@@ -4,13 +4,18 @@ import "./App.css";
 const App: React.FC = () => {
   const [mode, setMode] = useState("brief");
   const [fullPage, setFullPage] = useState(false);
+  const [customPrompt, setCustomPrompt] = useState(""); // State for the custom prompt
 
   useEffect(() => {
     // Load previously saved options
-    chrome.storage.sync.get(["summarizeMode", "fullPage"], (data) => {
-      if (data.summarizeMode) setMode(data.summarizeMode);
-      if (data.fullPage) setFullPage(data.fullPage);
-    });
+    chrome.storage.sync.get(
+      ["summarizeMode", "fullPage", "customPrompt"],
+      (data) => {
+        if (data.summarizeMode) setMode(data.summarizeMode);
+        if (data.fullPage) setFullPage(data.fullPage);
+        if (data.customPrompt) setCustomPrompt(data.customPrompt); // Load custom prompt
+      }
+    );
   }, []);
 
   const handleModeChange = (newMode: string) => {
@@ -46,6 +51,7 @@ const App: React.FC = () => {
       {
         summarizeMode: mode,
         fullPage,
+        customPrompt, // Save custom prompt
       },
       () => {
         chrome.notifications.create({
@@ -82,7 +88,23 @@ const App: React.FC = () => {
         <option value="brief">Brief</option>
         <option value="detailed">Detailed</option>
         <option value="bullet_points">Bullet Points</option>
+        <option value="customize">Customize</option>
       </select>
+
+      {mode === "customize" && (
+        <div className="customize-prompt-container">
+          <label className="label" htmlFor="customPrompt">
+            Enter Your Custom Prompt:
+          </label>
+          <textarea
+            id="customPrompt"
+            value={customPrompt}
+            onChange={(e) => setCustomPrompt(e.target.value)}
+            className="custom-prompt-input"
+            placeholder="Enter your custom summarization prompt here..."
+          />
+        </div>
+      )}
 
       <div className="checkbox-container">
         <input

@@ -93,6 +93,26 @@
   text-align: center;
 }
 
+.upload-btn {
+  flex: 1;
+  max-width: 140px;
+  padding: 10px 15px;
+  font-size: 24px; /* Increased from 14px */
+  font-weight: 600; /* Made slightly bolder */
+  cursor: pointer;
+  transition: transform 0.2s ease, background-color 0.3s ease;
+  text-align: center;
+  background-color: transparent;
+  border: none;
+  outline: none;
+  color: #9b8a4d; /* Black gold color */
+}
+
+.upload-btn:hover {
+  transform: scale(1.05);
+  color: #c0aa5e; /* Slightly lighter black gold on hover */
+}
+
 .copy-btn {
   background-color: #007aff; /* Apple's primary blue */
   color: #fff;
@@ -129,7 +149,12 @@
 }
 
 .light-sidebar .mode-selector {
-  background-color: rgba(240, 240, 240, 0.8); /* Light background for dropdown */
+  background-color: rgba(
+    240,
+    240,
+    240,
+    0.8
+  ); /* Light background for dropdown */
   color: #333; /* Text color for light mode */
 }
 
@@ -205,7 +230,12 @@
 }
 
 .light-minimized-icon {
-  background-color: rgba(255, 255, 255, 0.9); /* Light translucent for light mode */
+  background-color: rgba(
+    255,
+    255,
+    255,
+    0.9
+  ); /* Light translucent for light mode */
   color: #333;
 }
 
@@ -215,10 +245,45 @@
   box-shadow: 0 6px 15px rgba(0, 0, 0, 0.3);
 }
 
+#minimizedSidebarIcon img {
+  max-width: 100%;
+  max-height: 100%;
+  display: block;
+}
+
+#minimizedSidebarIcon {
+  position: fixed; /* Fixed to viewport for drag-and-drop */
+  top: 20px; /* Position 20px from the top */
+  right: 20px; /* Position 20px from the right */
+  z-index: 1000; /* Ensure it's above other elements */
+  width: 50px;
+  height: 50px;
+  background-color: #333; /* Background color */
+  color: #fff;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  border-radius: 50%; /* Circular shape */
+  cursor: grab; /* Indicate draggable */
+  box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.1); /* Add subtle shadow */
+  user-select: none; /* Prevent text selection during drag */
+  visibility: visible; /* Ensure the icon is visible */
+}
+
+#minimizedSidebarIcon.dragging {
+  cursor: grabbing; /* Change cursor during drag */
+  opacity: 0.8; /* Slight transparency while dragging */
+}
+
 .key-takeaways {
   margin-top: 20px;
   padding: 15px;
-  background-color: rgba(255, 255, 255, 0.1); /* Light translucent for dark mode */
+  background-color: rgba(
+    255,
+    255,
+    255,
+    0.1
+  ); /* Light translucent for dark mode */
   border-radius: 8px;
   font-size: 14px;
   line-height: 1.6;
@@ -247,58 +312,108 @@
   left: 0;
   width: 100vw;
   height: 100vh;
-  background-color: rgba(0, 0, 0, 0.6);
+  background-color: rgba(0, 0, 0, 0.8); /* Dark translucent background */
   display: flex;
   justify-content: center;
   align-items: center;
   z-index: 10000;
+  animation: fadeIn 0.3s ease;
 }
 
 /* Modal content */
 .modal-content {
-  background: #fff;
-  padding: 20px;
-  border-radius: 8px;
-  max-width: 500px;
+  background: #1e1e1e; /* Slightly lighter dark for a clean look */
+  border-radius: 16px; /* Softer rounded corners for elegance */
+  padding: 30px;
   width: 90%;
-  text-align: center;
-  overflow-y: auto;
-  max-height: 80%;
-  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+  max-width: 600px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5); /* Stronger shadow for depth */
+  font-family: "San Francisco", -apple-system, BlinkMacSystemFont, "Segoe UI",
+    Roboto, Helvetica, Arial, sans-serif;
+  animation: slideUp 0.3s ease;
+  max-height: 80vh;
+  overflow-y: auto; /* Scroll if content overflows */
+  color: #f5f5f7; /* Light text for dark mode */
 }
 
-/* Modal takeaways */
+/* Modal title */
+.modal-content h3 {
+  font-size: 24px;
+  font-weight: bold;
+  color: #ffffff; /* White title for dark theme */
+  text-align: center;
+  margin-bottom: 20px;
+  border-bottom: 2px solid rgba(255, 255, 255, 0.1); /* Subtle separator */
+  padding-bottom: 10px;
+}
+
+/* Key takeaways container */
 .modal-takeaways {
-  margin-top: 10px;
+  margin-top: 20px;
   text-align: left;
-  font-size: 14px;
-  line-height: 1.6;
 }
 
 .modal-tip {
   display: flex;
   align-items: flex-start;
-  margin: 10px 0;
+  margin-bottom: 15px;
 }
 
 .tip-icon {
+  font-size: 24px;
   margin-right: 10px;
-  font-size: 18px;
+  color: #ffc107; /* Warm gold for the tip icon */
 }
 
-/* Close button */
+.markdown-content {
+  font-size: 16px;
+  line-height: 1.8; /* Increased for better readability */
+  color: #e5e5e5; /* Slightly lighter gray for clarity */
+}
+
 .modal-close {
-  margin-top: 15px;
+  flex: 1; /* Makes the buttons take equal space */
+  max-width: 200px; /* Optional: Limits the button width */
+  background-color: #ff0400;
+  color: #ffffff;
   padding: 10px 20px;
   border: none;
-  border-radius: 5px;
-  background-color: #007aff;
-  color: #fff;
+  border-radius: 20px;
+  font-size: 14px;
+  text-align: center;
   cursor: pointer;
+  transition: background-color 0.3s ease;
 }
 
 .modal-close:hover {
-  background-color: #005bb5;
+  background-color: #a01c0d;
+  transform: scale(1.05);
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: center; /* Centers the buttons */
+  gap: 20px; /* Adds space between buttons */
+  margin-top: 20px;
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(20px);
+  }
+  to {
+    transform: translateY(0);
+  }
 }
 
 /* View Key Takeaways Button */
@@ -312,14 +427,18 @@
   font-weight: 500;
   cursor: pointer;
   text-align: center;
-  background: linear-gradient(135deg, #007aff, #0a84ff); /* Sleek gradient */
+  background: linear-gradient(135deg, #02cd05, #02c04e); /* Sleek gradient */
   color: #fff;
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); /* Soft shadow */
   transition: all 0.3s ease;
 }
 
 .view-takeaways-btn:hover {
-  background: linear-gradient(135deg, #005bb5, #007aff); /* Subtle darker gradient on hover */
+  background: linear-gradient(
+    135deg,
+    #0f9802c9,
+    #087e2c
+  ); /* Subtle darker gradient on hover */
   transform: scale(1.05); /* Slight zoom effect */
   box-shadow: 0 6px 12px rgba(0, 0, 0, 0.2); /* More prominent shadow */
 }
@@ -386,4 +505,79 @@
   color: #666;
   margin: 1em 0;
   font-style: italic;
+}
+
+.placeholder {
+  text-align: center;
+  margin-top: 20px;
+  font-style: italic;
+  color: #888;
+}
+
+/* Loading Spinner */
+.loading-spinner {
+  display: none; /* Initially hidden */
+  justify-content: center;
+  align-items: center;
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.5); /* Semi-transparent overlay */
+  z-index: 1000; /* Above other elements */
+}
+
+.loading-spinner.visible {
+  display: flex; /* Show spinner when active */
+}
+
+.loading-spinner::after {
+  content: "";
+  width: 50px;
+  height: 50px;
+  border: 5px solid #ccc;
+  border-top-color: #007bff; /* Primary color for spinner */
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+.custom-prompt-input {
+  width: 100%;
+  height: 100px;
+  margin-bottom: 15px;
+  padding: 10px;
+  border-radius: 5px;
+  border: 1px solid #555;
+  background: #444;
+  color: #fff;
+  font-size: 14px;
+  resize: none;
+}
+
+.save-btn,
+.cancel-btn {
+  padding: 10px 15px;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.save-btn {
+  background: #007bff;
+  color: #fff;
+}
+
+.cancel-btn {
+  background: #555;
+  color: #fff;
 }
