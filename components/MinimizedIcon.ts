@@ -12,7 +12,7 @@ export function createMinimizedIcon() {
       minimizedIcon.id = "minimizedSidebarIcon";
       minimizedIcon.className = isDarkMode ? "dark-minimized-icon" : "light-minimized-icon";
   
-      minimizedIcon.innerHTML = `<span style="font-size: 22px;">☰</span>`;
+      minimizedIcon.innerHTML = `<img src="https://uxwing.com/wp-content/themes/uxwing/download/brands-and-social-media/google-gemini-icon.png" alt="Icon" style="width: 22px; height: 22px;" />`;
       minimizedIcon.onclick = () => restoreSidebar(); // Add restore behavior
 
       // Set initial position at the top-right corner

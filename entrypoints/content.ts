@@ -5,14 +5,14 @@ import { displaySummary } from "@/utils/summary";
 export default defineContentScript({
   matches: ["<all_urls>"],
   main() {
-    
     let isDarkMode = true; // Default to dark mode
+    let isProcessing = false; // Add processing flag
 
     console.log("Content script loaded.");
 
     // Initialize sidebar and minimized icon based on the stored state
     chrome.storage.sync.get("sidebarVisible", (data) => {
-      const sidebarVisible = data.sidebarVisible ?? false; 
+      const sidebarVisible = data.sidebarVisible ?? false;
       // Ensure sidebar is created regardless of visibility
       let sidebar = document.getElementById("summarySidebar");
       if (!sidebar) {
@@ -22,7 +22,7 @@ export default defineContentScript({
       }
 
       const minimizedIcon = document.getElementById("minimizedSidebarIcon");
-  
+
       if (sidebarVisible) {
         // Show the sidebar and hide the minimized icon
         if (sidebar) {
@@ -43,17 +43,81 @@ export default defineContentScript({
         }
       }
     });
-  
+
     chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-      if (request.action === "displaySummary") {
+      // Handle ping message from background script
+      if (request.action === "ping") {
+        sendResponse({ status: "alive" });
+        return true;
+      }
+
+      // Handle display summary
+      if (request.action === "displaySummary" && !isProcessing) {
         console.log("Received displaySummary message", request);
-  
-        // Store key takeaways in chrome storage for later access
-        chrome.storage.sync.set({ lastTakeaways: request.takeaways }, () => {
-          console.log("Key takeaways stored successfully.");
+        isProcessing = true;
+
+        try {
+          // Store key takeaways in chrome storage for later access
+          chrome.storage.sync.set({ lastTakeaways: request.takeaways }, () => {
+            console.log("Key takeaways stored successfully.");
+          });
+
+          displaySummary(request.summary, request.takeaways, request.mode);
+          sendResponse({ success: true });
+        } catch (error) {
+          console.error("Error displaying summary:", error);
+          sendResponse({ success: false, error: (error as Error).message });
+        } finally {
+          isProcessing = false;
+        }
+      }
+
+      // Handle clear summary
+      if (request.action === "clearSummary") {
+        const sidebar = document.getElementById("summarySidebar");
+        if (sidebar) {
+          // Clear the summary content
+          const summaryContent = sidebar.querySelector("#summaryContent");
+          if (summaryContent) {
+            summaryContent.innerHTML = "";
+          }
+
+          // Clear the takeaways content
+          const takeawaysContent = sidebar.querySelector("#takeawaysContent");
+          if (takeawaysContent) {
+            takeawaysContent.innerHTML = "";
+          }
+        }
+        sendResponse({ success: true });
+      }
+
+      return true; // Keep the message channel open for async responses
+    });
+
+    chrome.runtime.onConnect.addListener((port) => {
+      if (port.name === "modeSwitchPort") {
+        port.onMessage.addListener((message) => {
+          switch (message.action) {
+            case "showLoading":
+              showLoading();
+              break;
+            case "hideLoading":
+              hideLoading();
+              break;
+            case "displaySummary":
+              displaySummary(message.summary, message.takeaways, message.mode);
+              break;
+            case "displayError":
+              // Implement error display in your UI
+              console.error(message.error);
+              // You might want to show this error in the UI
+              break;
+            case "processingUpdate":
+              // Optional: Update UI with processing status
+              console.log(message.status);
+              break;
+          }
         });
-  
-        displaySummary(request.summary, request.takeaways, request.mode);
       }
     });
   },

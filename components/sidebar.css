@@ -93,6 +93,26 @@
   text-align: center;
 }
 
+.upload-btn {
+  flex: 1;
+  max-width: 140px;
+  padding: 10px 15px;
+  font-size: 24px; /* Increased from 14px */
+  font-weight: 600; /* Made slightly bolder */
+  cursor: pointer;
+  transition: transform 0.2s ease, background-color 0.3s ease;
+  text-align: center;
+  background-color: transparent;
+  border: none;
+  outline: none;
+  color: #9b8a4d; /* Black gold color */
+}
+
+.upload-btn:hover {
+  transform: scale(1.05);
+  color: #c0aa5e; /* Slightly lighter black gold on hover */
+}
+
 .copy-btn {
   background-color: #007aff; /* Apple's primary blue */
   color: #fff;
@@ -129,7 +149,12 @@
 }
 
 .light-sidebar .mode-selector {
-  background-color: rgba(240, 240, 240, 0.8); /* Light background for dropdown */
+  background-color: rgba(
+    240,
+    240,
+    240,
+    0.8
+  ); /* Light background for dropdown */
   color: #333; /* Text color for light mode */
 }
 
@@ -205,7 +230,12 @@
 }
 
 .light-minimized-icon {
-  background-color: rgba(255, 255, 255, 0.9); /* Light translucent for light mode */
+  background-color: rgba(
+    255,
+    255,
+    255,
+    0.9
+  ); /* Light translucent for light mode */
   color: #333;
 }
 
@@ -213,6 +243,12 @@
 .light-minimized-icon:hover {
   transform: scale(1.1); /* Subtle zoom effect */
   box-shadow: 0 6px 15px rgba(0, 0, 0, 0.3);
+}
+
+#minimizedSidebarIcon img {
+  max-width: 100%;
+  max-height: 100%;
+  display: block;
 }
 
 #minimizedSidebarIcon {
@@ -239,11 +275,15 @@
   opacity: 0.8; /* Slight transparency while dragging */
 }
 
-
 .key-takeaways {
   margin-top: 20px;
   padding: 15px;
-  background-color: rgba(255, 255, 255, 0.1); /* Light translucent for dark mode */
+  background-color: rgba(
+    255,
+    255,
+    255,
+    0.1
+  ); /* Light translucent for dark mode */
   border-radius: 8px;
   font-size: 14px;
   line-height: 1.6;
@@ -288,7 +328,8 @@
   width: 90%;
   max-width: 600px;
   box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5); /* Stronger shadow for depth */
-  font-family: 'San Francisco', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  font-family: "San Francisco", -apple-system, BlinkMacSystemFont, "Segoe UI",
+    Roboto, Helvetica, Arial, sans-serif;
   animation: slideUp 0.3s ease;
   max-height: 80vh;
   overflow-y: auto; /* Scroll if content overflows */
@@ -344,9 +385,8 @@
   transition: background-color 0.3s ease;
 }
 
-
 .modal-close:hover {
-  background-color: #a01c0d; 
+  background-color: #a01c0d;
   transform: scale(1.05);
 }
 
@@ -356,7 +396,6 @@
   gap: 20px; /* Adds space between buttons */
   margin-top: 20px;
 }
-
 
 /* Animations */
 @keyframes fadeIn {
@@ -395,7 +434,11 @@
 }
 
 .view-takeaways-btn:hover {
-  background: linear-gradient(135deg, #0f9802c9, #087e2c); /* Subtle darker gradient on hover */
+  background: linear-gradient(
+    135deg,
+    #0f9802c9,
+    #087e2c
+  ); /* Subtle darker gradient on hover */
   transform: scale(1.05); /* Slight zoom effect */
   box-shadow: 0 6px 12px rgba(0, 0, 0, 0.2); /* More prominent shadow */
 }
@@ -520,7 +563,6 @@
   font-size: 14px;
   resize: none;
 }
-
 
 .save-btn,
 .cancel-btn {
