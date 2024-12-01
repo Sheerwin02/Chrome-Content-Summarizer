@@ -1,11 +1,7 @@
 import { summarizeText, summarizeFullPage } from "../apis/summarize";
 import { handleFileUploadAndSummarize } from "../apis/fileHandler";
 import { summarizeDoc } from "@/apis/summarize";
-import {
-  ensureContentScriptLoaded,
-  handleSelectionSummarize,
-  updateActiveTab,
-} from "@/utils/handle";
+import { handleSelectionSummarize } from "@/utils/handle";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 interface ContentState {

@@ -1,8 +1,8 @@
 {
   "name": "Content Summarizer",
-  "description": "Summarizes lengthy articles, reports, and videos.",
+  "description": "A content summarizer that uses AI to summarize articles and documents.",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0.1",
   "type": "module",
   "scripts": {
     "dev": "wxt",
@@ -15,6 +15,7 @@
     "postinstall": "wxt prepare"
   },
   "dependencies": {
+    "@google-cloud/translate": "^8.5.0",
     "@google/generative-ai": "^0.21.0",
     "@types/marked": "^6.0.0",
     "dotenv": "^16.4.5",
