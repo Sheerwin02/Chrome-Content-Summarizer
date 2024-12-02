@@ -245,6 +245,12 @@
   box-shadow: 0 6px 15px rgba(0, 0, 0, 0.3);
 }
 
+#minimizedSidebarIcon img {
+  max-width: 100%;
+  max-height: 100%;
+  display: block;
+}
+
 #minimizedSidebarIcon {
   position: fixed; /* Fixed to viewport for drag-and-drop */
   top: 20px; /* Position 20px from the top */
