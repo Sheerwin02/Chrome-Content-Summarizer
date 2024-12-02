@@ -15,7 +15,7 @@ This template should help get you started developing with React in WXT.
 
 ## Document Summarization
 
-* Support for .txt, .pdf, and .docx files
+* Support for .txt and .pdf files
 * Intelligent document parsing
 * Key points extraction
 
