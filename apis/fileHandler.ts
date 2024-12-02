@@ -11,42 +11,72 @@ let currentFileState: FileState | null = null;
 export async function handleFileUploadAndSummarize(
   file: File | { name: string; type: string; data: string },
   apiKey: string,
-  p0: (response: any) => void
+  progressCallback: (response: any) => void
 ): Promise<{ summary: string; takeaways: string[] }> {
   const genAI = new GoogleGenerativeAI(apiKey);
 
   try {
     console.log(
       "Processing file:",
-      typeof file === "string" ? "base64 string" : file.name
+      file instanceof File ? file.name : file.name
     );
 
-    // Store file state
+    // Create file state
+    let currentFileState: {
+      content: string;
+      mimeType: string;
+      fileName: string;
+      originalContent?: string; // Add this to store original content
+    };
+
     if (file instanceof File) {
-      currentFileState = {
-        mimeType: file.type || "application/pdf",
-        content: await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => {
-            const result = reader.result as string;
-            const base64 = result.split(",")[1];
+      // Read file content
+      const content = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          let result = reader.result as string;
+          if (file.type === "text/plain") {
+            // Store both original and processed content for text files
+            resolve(result);
+          } else {
+            const base64 = result.split(",")[1] || result;
             resolve(base64);
-          };
-          reader.onerror = reject;
+          }
+        };
+        reader.onerror = reject;
+
+        if (file.type === "text/plain") {
+          reader.readAsText(file);
+        } else {
           reader.readAsDataURL(file);
-        }),
-        isProcessing: false,
+        }
+      });
+
+      currentFileState = {
+        mimeType: file.type || "text/plain",
+        content: content,
+        fileName: file.name,
+        originalContent: file.type === "text/plain" ? content : undefined,
       };
     } else {
       currentFileState = {
         mimeType: file.type,
         content: file.data.includes(",") ? file.data.split(",")[1] : file.data,
-        isProcessing: false,
+        fileName: file.name,
+        originalContent: file.type === "text/plain" ? file.data : undefined,
       };
     }
 
-    // Store current file state in chrome storage
+    console.log("File state created:", {
+      mimeType: currentFileState.mimeType,
+      fileName: currentFileState.fileName,
+      contentLength: currentFileState.content.length,
+      hasOriginalContent: !!currentFileState.originalContent,
+    });
+
+    // Store complete file state in chrome storage
     await chrome.storage.local.set({ currentFileState });
+    console.log("File state stored in chrome.storage.local");
 
     // Initial summary generation
     const { summarizeMode } = await chrome.storage.sync.get("summarizeMode");
@@ -57,8 +87,4 @@ export async function handleFileUploadAndSummarize(
     console.error("Error processing file:", errorMessage);
     throw new Error(`Error processing document: ${errorMessage}`);
   }
-}
-
-export function getCurrentFileState(): FileState | null {
-  return currentFileState;
 }

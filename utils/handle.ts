@@ -1,4 +1,3 @@
-import { handleFileUploadAndSummarize } from "@/apis/fileHandler";
 import { summarizeText } from "@/apis/summarize";
 
 let currentState: {
@@ -14,7 +13,12 @@ export async function handleSelectionSummarize(tabId: number, text: string) {
 
     const { summarizeMode } = await chrome.storage.sync.get("summarizeMode");
     const mode = summarizeMode || "brief";
-    const { summary, takeaways } = await summarizeText(text, mode);
+    const abortController = new AbortController();
+    const { summary, takeaways } = await summarizeText(
+      text,
+      mode,
+      abortController.signal
+    );
 
     currentState.lastSummary = { summary, takeaways, mode };
     await updateActiveTab(summary, takeaways, mode, false);

@@ -20,45 +20,55 @@ export async function displaySummary(
   if (!sidebar) {
     sidebar = createSidebar();
     document.body.appendChild(sidebar);
-    console.log("Sidebar created and appended to DOM.");
-  } else {
-    console.log("Sidebar already exists.");
   }
 
   const contentArea = document.getElementById("summaryContent");
-  if (contentArea) {
-    showLoading(); // Show loading spinner while rendering content
-    contentArea.innerHTML = ""; // Clear existing content
+  if (!contentArea) {
+    hideLoading();
+    return;
+  }
+
+  try {
+    // Show loading before content update
+    showLoading();
+
+    // Clear existing content
+    contentArea.innerHTML = "";
 
     if (summary.trim() === "") {
-      // Add placeholder if no summary is provided
       contentArea.innerHTML = `
-          <div class="placeholder">
-            <p>No summary available yet. Highlight some text and summarize!</p>
-          </div>`;
-      console.log("Placeholder added to content area.");
-    } else {
+        <div class="placeholder">
+          <p>No summary available yet. Highlight some text and summarize!</p>
+        </div>`;
+      return;
+    }
+
+    // Render content with a small delay to ensure loading spinner shows
+    setTimeout(async () => {
       try {
-        // Render summary content
         const renderedContent = await marked.parse(summary);
         contentArea.innerHTML = renderedContent;
-        contentArea.style.color = isDarkMode ? "#F0F0F0" : "#333"; // Update font color
+        contentArea.style.color = isDarkMode ? "#F0F0F0" : "#333";
+
+        // Store takeaways
+        await chrome.storage.sync.set({ lastTakeaways: takeaways });
+
+        // Update mode indicator
+        const modeIndicator = document.getElementById("modeIndicator");
+        if (modeIndicator) {
+          modeIndicator.innerText = `Current Mode: ${mode || "Not set"}`;
+        }
       } catch (error) {
         console.error("Error rendering content:", error);
         contentArea.innerHTML = `<p>${escapeHTML(summary)}</p>`;
+      } finally {
+        hideLoading();
       }
-    }
-    // Hide the loading spinner
+    }, 100);
+  } catch (error) {
+    console.error("Error in displaySummary:", error);
+    showInAppNotification("Error displaying summary");
     hideLoading();
-  }
-
-  chrome.storage.sync.set({ lastTakeaways: takeaways }, () => {
-    console.log("Key takeaways stored successfully.");
-  });
-
-  const modeIndicator = document.getElementById("modeIndicator");
-  if (modeIndicator) {
-    modeIndicator.innerText = `Current Mode: ${mode || "Not set"}`;
   }
 }
 

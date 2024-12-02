@@ -25,9 +25,11 @@ export async function summarizeFullPage(tabId: number): Promise<void> {
           const mode = data.summarizeMode || "brief";
 
           try {
+            const abortController = new AbortController();
             const { summary, takeaways } = await summarizeText(
               fullPageText,
-              mode
+              mode,
+              abortController.signal
             );
             chrome.tabs.sendMessage(tabId, {
               action: "displaySummary",
@@ -53,7 +55,8 @@ export async function summarizeFullPage(tabId: number): Promise<void> {
 
 export async function summarizeText(
   selectedText: string,
-  mode: string
+  mode: string,
+  signal: AbortSignal
 ): Promise<{ summary: string; takeaways: string[] }> {
   const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
 
@@ -189,7 +192,12 @@ export async function handleFullPageSummarization(
       const mode = summarizeMode || "brief";
 
       if (fullPageText) {
-        const summary = await summarizeText(fullPageText, mode);
+        const abortController = new AbortController();
+        const summary = await summarizeText(
+          fullPageText,
+          mode,
+          abortController.signal
+        );
         chrome.tabs.sendMessage(activeTab[0].id, {
           action: "displaySummary",
           summary,
@@ -220,7 +228,8 @@ export async function handleSummarizeRequest(
   chrome.storage.sync.get(["summarizeMode"], (data) => {
     const mode = data.summarizeMode || "brief";
 
-    summarizeText(textToSummarize, mode)
+    const abortController = new AbortController();
+    summarizeText(textToSummarize, mode, abortController.signal)
       .then(({ summary, takeaways }) => {
         sendResponse({ summary, takeaways });
       })
@@ -237,172 +246,163 @@ export async function summarizeDoc(
   mode: string,
   genAI: any
 ): Promise<{ summary: string; takeaways: string[] }> {
-  const fileState = await chrome.storage.local.get("currentFileState");
-  const currentFileState = fileState.currentFileState;
+  const { currentFileState } = await chrome.storage.local.get(
+    "currentFileState"
+  );
 
-  if (!currentFileState || currentFileState.isProcessing) {
-    throw new Error("No file content available or processing in progress");
+  if (!currentFileState) {
+    throw new Error("No file content available");
   }
 
   // Set processing flag
-  currentFileState.isProcessing = true;
-  await chrome.storage.local.set({ currentFileState });
+  await chrome.storage.local.set({
+    currentFileState: { ...currentFileState, isProcessing: true },
+  });
 
   try {
-    let promptText = "";
-    if (mode === "customize") {
-      const { customPrompt } = await chrome.storage.sync.get("customPrompt");
-      console.log("Retrieved custom prompt:", customPrompt);
+    let content = currentFileState.content;
 
-      // Ensure the custom prompt will generate separable content
-      let basePrompt = customPrompt?.trim() || "";
+    // For text files, decode base64 if needed
+    if (currentFileState.mimeType === "text/plain") {
+      try {
+        if (content.match(/^[A-Za-z0-9+/=]+$/)) {
+          content = atob(content);
+        } else if (content.includes("base64,")) {
+          const base64Data = content.split("base64,")[1];
+          content = atob(base64Data);
+        }
 
-      // Check if the custom prompt already mentions summary and takeaways
-      const hasSummaryMention = /summary|overview|main\s+points/i.test(
-        basePrompt
-      );
-      const hasTakeawaysMention =
-        /takeaways|key\s+points|main\s+takeaways/i.test(basePrompt);
+        content = content.trim();
 
-      console.log("Custom prompt analysis:", {
-        hasSummaryMention,
-        hasTakeawaysMention,
-        basePrompt,
-      });
+        // For very short text content, provide immediate response
+        if (content.length < 100) {
+          const result = {
+            summary: content,
+            takeaways: [content],
+          };
 
-      // Append necessary structure if not present
-      if (!hasSummaryMention || !hasTakeawaysMention) {
-        promptText = `${basePrompt}\n\nPlease structure your response with:\n1. A clear summary at the beginning\n2. A "Key Takeaways" section using bullet points for important insights\n\nEnsure these sections are clearly separated.`;
-      } else {
-        promptText = basePrompt;
-      }
+          // Clear processing flag before returning
+          await chrome.storage.local.set({
+            currentFileState: { ...currentFileState, isProcessing: false },
+          });
 
-      console.log("Final custom prompt:", promptText);
-    } else {
-      switch (mode) {
-        case "detailed":
-          promptText = `Provide a detailed analysis of the document with:
-            1. A comprehensive summary section focusing on the main content
-            2. A separate key takeaways section with actionable bullet points`;
-          break;
-        case "bullet_points":
-          promptText = `Analyze the document and provide:
-            1. A summary section in clear bullet points
-            2. A separate key takeaways section with actionable insights`;
-          break;
-        default: // brief mode
-          promptText = `Provide a concise analysis with:
-            1. A brief summary section of the main points
-            2. A separate key takeaways section with essential bullet points`;
+          return result;
+        }
+      } catch (error) {
+        console.error("Error processing text content:", error);
       }
     }
 
+    // For longer content or other file types, use the AI model
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const promptText = generatePromptText(mode);
 
-    // Handle base64 content
-    if (!currentFileState.content.match(/^[A-Za-z0-9+/=]+$/)) {
-      const base64Match = currentFileState.content.match(
-        /^data:.*;base64,(.*)$/
-      );
-      if (base64Match) {
-        currentFileState.content = base64Match[1];
-      } else {
-        throw new Error("Invalid file content format");
+    let result;
+    // Handle text files
+    if (currentFileState.mimeType === "text/plain") {
+      result = await model.generateContent({
+        contents: [
+          {
+            role: "user",
+            parts: [{ text: content + "\n\n" + promptText }],
+          },
+        ],
+      });
+    } else {
+      // Handle other file types
+      if (!content.match(/^[A-Za-z0-9+/=]+$/)) {
+        const base64Match = content.match(/^data:.*;base64,(.*)$/);
+        if (base64Match) {
+          content = base64Match[1];
+        }
       }
-    }
 
-    const result = await model.generateContent({
-      contents: [
-        {
-          role: "user",
-          parts: [
-            {
-              inlineData: {
-                mimeType: currentFileState.mimeType,
-                data: currentFileState.content,
+      result = await model.generateContent({
+        contents: [
+          {
+            role: "user",
+            parts: [
+              {
+                inlineData: {
+                  mimeType: currentFileState.mimeType,
+                  data: content,
+                },
               },
-            },
-            { text: promptText },
-          ],
-        },
-      ],
-    });
+              { text: promptText },
+            ],
+          },
+        ],
+      });
+    }
 
     const response = await result.response;
     const rawOutput = response.text();
-
     if (!rawOutput) {
       throw new Error("Received empty response from API");
     }
 
-    // Use regex to split the summary and key takeaways
-    let summary = "";
-    let takeaways: string[] = [];
+    const processedOutput = processOutput(rawOutput);
 
-    console.log("Raw output from API:", rawOutput);
-
-    // Regular expression to match common key takeaways section headers - more inclusive for custom formats
-    const keyTakeawaysRegex =
-      /(?:^|\n)(?:\*\*)?(?:Key\s+Takeaways?\:?|\d+\.\s*Key\s+Takeaways?\:?|Important\s+Points?\:?|Main\s+Takeaways?\:?|Key\s+Points?\:?)(?:\*\*)?/i;
-    console.log("Using key takeaways regex pattern:", keyTakeawaysRegex.source);
-
-    const sections = rawOutput.split(keyTakeawaysRegex);
-    console.log("Split sections length:", sections.length);
-    console.log("Split sections:", sections);
-
-    if (sections.length >= 2) {
-      // Everything before the "Key Takeaways" marker is the summary
-      summary = sections[0].trim();
-      console.log("Extracted summary:", summary);
-
-      // Extract bullet points from the takeaways section
-      const takeawaysSection = sections[1];
-      console.log("Raw takeaways section:", takeawaysSection);
-
-      const bulletPointRegex = /(?:^|\n)\s*(?:[•\-\*]|\d+\.)\s*(.+)/gm;
-      console.log("Using bullet point regex pattern:", bulletPointRegex.source);
-
-      const matches = [...takeawaysSection.matchAll(bulletPointRegex)];
-      console.log("Found bullet point matches:", matches);
-
-      takeaways = matches
-        .map((match) => match[1].trim())
-        .filter((takeaway) => takeaway.length > 0);
-
-      console.log("Final processed takeaways:", takeaways);
-    } else {
-      // If no clear split is found, treat everything as summary
-      console.log("No clear section split found, using entire text as summary");
-      summary = rawOutput;
-    }
-
-    console.log("Final output:", {
-      summaryLength: summary.length,
-      takeawaysCount: takeaways.length,
-      summary: summary.substring(0, 100) + "...", // Log first 100 chars of summary
-      takeaways,
+    // Clear processing flag before returning success
+    await chrome.storage.local.set({
+      currentFileState: { ...currentFileState, isProcessing: false },
     });
 
-    // Ensure we have valid content
-    if (!summary) {
-      throw new Error("Failed to extract summary from response");
-    }
-
-    // Clean up summary and takeaways
-    summary = summary
-      .replace(/^(?:Summary|Overview|Main Points)[:.\s-]*/i, "")
-      .trim();
-
-    return {
-      summary,
-      takeaways: takeaways.length > 0 ? takeaways : [],
-    };
+    return processedOutput;
   } catch (error) {
-    console.error("Error in regenerateSummary:", error);
+    console.error("Error in summarizeDoc:", error);
+    // Clear processing flag even if there's an error
+    await chrome.storage.local.set({
+      currentFileState: { ...currentFileState, isProcessing: false },
+    });
     throw error;
-  } finally {
-    // Clear processing flag
-    currentFileState.isProcessing = false;
-    await chrome.storage.local.set({ currentFileState });
   }
+}
+
+function generatePromptText(mode: string): string {
+  switch (mode) {
+    case "detailed":
+      return `Provide a detailed analysis of the document with:
+        1. A comprehensive summary section focusing on the main content
+        2. A separate key takeaways section with actionable bullet points`;
+    case "bullet_points":
+      return `Analyze the document and provide:
+        1. A summary section in clear bullet points
+        2. A separate key takeaways section with actionable insights`;
+    default:
+      return `Provide a concise analysis with:
+        1. A brief summary section of the main points
+        2. A separate key takeaways section with essential bullet points`;
+  }
+}
+
+function processOutput(rawOutput: string): {
+  summary: string;
+  takeaways: string[];
+} {
+  const keyTakeawaysRegex =
+    /(?:^|\n)(?:\*\*)?(?:Key\s+Takeaways?\:?|\d+\.\s*Key\s+Takeaways?\:?|Important\s+Points?\:?|Main\s+Takeaways?\:?|Key\s+Points?\:?)(?:\*\*)?/i;
+  const sections = rawOutput.split(keyTakeawaysRegex);
+
+  let summary = "";
+  let takeaways: string[] = [];
+
+  if (sections.length >= 2) {
+    summary = sections[0].trim();
+    const takeawaysSection = sections[1];
+    const bulletPointRegex = /(?:^|\n)\s*(?:[•\-\*]|\d+\.)\s*(.+)/gm;
+    const matches = [...takeawaysSection.matchAll(bulletPointRegex)];
+    takeaways = matches
+      .map((match) => match[1].trim())
+      .filter((takeaway) => takeaway.length > 0);
+  } else {
+    summary = rawOutput;
+  }
+
+  return {
+    summary: summary
+      .replace(/^(?:Summary|Overview|Main Points)[:.\s-]*/i, "")
+      .trim(),
+    takeaways: takeaways.length > 0 ? takeaways : [],
+  };
 }
