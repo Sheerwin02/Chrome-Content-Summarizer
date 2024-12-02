@@ -23,6 +23,9 @@ export default defineConfig({
         js: ["content-scripts/content.js"], // Adjust this path based on the actual output location
         run_at: "document_idle"
       }
-    ]
+    ],
+    origin_trial_tokens: {
+      translation: import.meta.env.VITE_TRANSLATE_API_KEY
+    }
   }
 });

@@ -8,6 +8,7 @@ import {
 } from "./helpers";
 import { createSidebar } from "@/components/Sidebar";
 import { marked } from "marked";
+import { translateContent } from "@/apis/translation";
 
 let isDarkMode = true; // Default to dark mode
 
@@ -37,105 +38,122 @@ export async function displaySummary(
 
     if (summary.trim() === "") {
       contentArea.innerHTML = `
-        <div class="placeholder">
-          <p>No summary available yet. Highlight some text and summarize!</p>
-        </div>`;
+          <div class="placeholder">
+            <p>No summary available yet. Highlight some text and summarize!</p>
+          </div>`;
+      console.log("Placeholder added to content area.");
+      hideLoading();
       return;
     }
 
-    // Render content with a small delay to ensure loading spinner shows
-    setTimeout(async () => {
-      try {
-        const renderedContent = await marked.parse(summary);
-        contentArea.innerHTML = renderedContent;
-        contentArea.style.color = isDarkMode ? "#F0F0F0" : "#333";
+    try {
+      // Retrieve translation settings
+      chrome.storage.sync.get(["sourceLang", "targetLang"], async (data) => {
+        const sourceLang = data.sourceLang || "en";
+        const targetLang = data.targetLang || "en";
 
-        // Store takeaways
-        await chrome.storage.sync.set({ lastTakeaways: takeaways });
+        let finalContent = summary; // Fallback to the original summary
 
-        // Update mode indicator
-        const modeIndicator = document.getElementById("modeIndicator");
-        if (modeIndicator) {
-          modeIndicator.innerText = `Current Mode: ${mode || "Not set"}`;
+        // Perform translation only if source and target languages differ
+        if (sourceLang !== targetLang) {
+          showLoading(); // Keep the loader running during translation
+          try {
+            const translatedText = await translateContent(
+              sourceLang,
+              targetLang,
+              summary
+            );
+            if (translatedText) {
+              finalContent = translatedText; // Use translated content if available
+            } else {
+              console.warn("Translation failed, using original summary.");
+            }
+          } catch (translationError) {
+            console.error("Error during translation:", translationError);
+            showInAppNotification(
+              "Translation failed. Displaying the original summary."
+            );
+          }
+          hideLoading(); // Hide the loader after translation
         }
-      } catch (error) {
-        console.error("Error rendering content:", error);
-        contentArea.innerHTML = `<p>${escapeHTML(summary)}</p>`;
-      } finally {
-        hideLoading();
-      }
-    }, 100);
+
+        // Render content (translated or original)
+        const renderedContent = await marked.parse(finalContent);
+        contentArea.innerHTML = renderedContent;
+
+        contentArea.style.color = isDarkMode ? "#F0F0F0" : "#333"; // Update font color
+        hideLoading(); // Ensure the loader is hidden after rendering
+      });
+    } catch (error) {
+      console.error("Error rendering content:", error);
+      contentArea.innerHTML = `<p>${escapeHTML(summary)}</p>`;
+      hideLoading(); // Hide loader on error
+    }
   } catch (error) {
-    console.error("Error in displaySummary:", error);
-    showInAppNotification("Error displaying summary");
-    hideLoading();
+    console.error("Error in displaySummary function:", error);
+    hideLoading(); // Ensure the loader is hidden on error
   }
 }
 
 export function regenerateSummary() {
+  // Retrieve necessary data from storage
   chrome.storage.sync.get(
-    ["summarizeMode", "lastHighlightedText"],
+    ["summarizeMode", "lastHighlightedText", "sourceLang", "targetLang"],
     async (data) => {
       const mode = data.summarizeMode || "brief";
+      const sourceLang = data.sourceLang || "en"; // Fetch the current source language
+      const targetLang = data.targetLang || "en"; // Fetch the current target language
 
-      // First check if we're dealing with a document
-      const fileState = await chrome.storage.local.get("currentFileState");
-      const currentFileState = fileState.currentFileState;
+      // Debugging logs
+      console.log("Mode:", mode);
+      console.log("Source Language:", sourceLang);
+      console.log("Target Language:", targetLang);
+      console.log("Retrieved lastHighlightedText:", data.lastHighlightedText);
 
-      if (currentFileState) {
-        console.log("Document state found, processing document...");
-        showLoading();
-
-        // Send document summarize request
-        chrome.runtime.sendMessage(
-          {
-            action: "summarizeDocument",
-            mode,
-            fileState: currentFileState,
-          },
-          (response) => {
-            hideLoading();
-
-            if (response?.summary) {
-              displaySummary(response.summary, response.takeaways || [], mode);
-            } else if (response?.error) {
-              console.error("Document summarization failed:", response.error);
-              showInAppNotification("Failed to regenerate document summary");
-            } else {
-              console.error("Unexpected response:", response);
-              showInAppNotification("Unexpected error occurred.");
-            }
-          }
-        );
-        return;
-      }
-
-      // If no document, proceed with text summarization
+      // Handle text summarization
       let textToSummarize = data.lastHighlightedText || "";
 
       if (!textToSummarize) {
-        textToSummarize = getFullPageText();
+        textToSummarize = getFullPageText(); // Fallback to full page text
         if (!textToSummarize) {
           showInAppNotification("No text available to regenerate the summary.");
           return;
         }
-        console.log("Full page text fetched for summarization");
+        console.log("Fetched full-page text:", textToSummarize);
       }
 
-      textToSummarize = truncateText(textToSummarize);
-      showLoading();
+      textToSummarize = truncateText(textToSummarize); // Truncate text if necessary
+      showLoading(); // Show loading spinner
 
+      // Summarize the text
       chrome.runtime.sendMessage(
         {
           action: "summarize",
           mode,
           text: textToSummarize,
         },
-        (response) => {
-          hideLoading();
+        async (response) => {
+          hideLoading(); // Hide loading spinner
 
           if (response?.summary) {
-            displaySummary(response.summary, response.takeaways || [], mode);
+            // Translate the summary if source and target languages differ
+            let finalSummary = response.summary;
+            if (sourceLang !== targetLang) {
+              try {
+                const translatedText = await translateContent(
+                  sourceLang,
+                  targetLang,
+                  finalSummary
+                );
+                finalSummary = translatedText || finalSummary; // Fallback to original if translation fails
+              } catch (error) {
+                console.error("Error translating text summary:", error);
+                showInAppNotification(
+                  "Translation failed. Displaying the original summary."
+                );
+              }
+            }
+            displaySummary(finalSummary, response.takeaways || [], mode); // Display final summary
           } else if (response?.error) {
             console.error("Summarization failed:", response.error);
             showInAppNotification("Failed to regenerate summary");
@@ -148,3 +166,13 @@ export function regenerateSummary() {
     }
   );
 }
+
+// Listener to capture highlighted text and save it
+document.addEventListener("mouseup", () => {
+  const selectedText = window.getSelection()?.toString();
+  if (selectedText && selectedText.trim() !== "") {
+    chrome.storage.sync.set({ lastHighlightedText: selectedText }, () => {
+      console.log("Saved highlighted text:", selectedText);
+    });
+  }
+});
