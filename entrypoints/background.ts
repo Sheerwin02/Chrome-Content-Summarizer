@@ -345,7 +345,11 @@ export default defineBackground(() => {
             // Pass the complete file state to summarizeDoc
             result = await summarizeDoc(mode, genAI);
           } else if (currentState.type === "text" && currentState.content) {
-            result = await summarizeText(currentState.content, mode);
+            result = await summarizeText(
+              currentState.content,
+              mode,
+              new AbortController().signal
+            );
           } else {
             throw new Error("No content available to regenerate");
           }
