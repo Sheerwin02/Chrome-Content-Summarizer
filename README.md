@@ -1,4 +1,5 @@
 # Text and Document Content Summarization Chrome Extension
+![image](https://github.com/user-attachments/assets/0701d674-37ef-4b82-9ec5-c4df0dae1300)
 
 This Chrome extension provides AI-powered summarization capabilities for both webpage text and uploaded documents. It utilizes Google's Gemini model for generating summaries and key takeaways.
 
