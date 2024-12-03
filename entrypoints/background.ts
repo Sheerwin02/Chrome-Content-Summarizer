@@ -16,6 +16,13 @@ interface ContentState {
   currentRequest?: AbortController; // Add this to track current request
 }
 
+export interface FileState {
+  content: string;
+  mimeType: string;
+  name: string;
+  isProcessing: boolean;
+}
+
 let currentState: ContentState = {
   type: null,
   content: null,
@@ -155,8 +162,8 @@ export default defineBackground(() => {
             currentState.isProcessing = false;
             console.log("Summarization result:", result);
             sendResponse({
-              summary: result.summary,
-              takeaways: result.takeaways,
+              summary: result?.summary ?? "",
+              takeaways: result?.takeaways ?? [],
             });
           } catch (error) {
             clearTimeout(timeout);
@@ -325,10 +332,15 @@ export default defineBackground(() => {
             "currentFileState"
           );
 
-          console.log("Current file state:", currentFileState); // Debug log
+          console.log("Current file state:", currentFileState);
+          console.log("Current state type:", currentState.type);
 
           let result;
-          if (currentState.type === "document" && currentFileState) {
+          if (currentState.type === "document") {
+            if (!currentFileState) {
+              throw new Error("No file state available for regeneration");
+            }
+
             if (!genAI) {
               throw new Error("AI model not initialized");
             }
@@ -338,8 +350,8 @@ export default defineBackground(() => {
               status: "Regenerating summary...",
             });
 
-            // Pass the complete file state to summarizeDoc
-            result = await summarizeDoc(mode, genAI);
+            // Ensure we're using the stored file state for regeneration
+            result = await summarizeDoc(mode, genAI, currentFileState);
           } else if (currentState.type === "text" && currentState.content) {
             result = await summarizeText(
               currentState.content,
@@ -372,11 +384,7 @@ export default defineBackground(() => {
         } finally {
           port?.postMessage({ action: "hideLoading" });
           if (port) {
-            setTimeout(() => {
-              if (port) {
-                port.disconnect();
-              }
-            }, 100);
+            setTimeout(() => port?.disconnect(), 100);
           }
         }
       }, 300);

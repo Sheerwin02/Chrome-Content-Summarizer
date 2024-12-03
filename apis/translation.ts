@@ -65,3 +65,30 @@ export async function translateContent(
     return null;
   }
 }
+
+export async function translateTakeaways(
+  takeaways: string[],
+  sourceLang: string,
+  targetLang: string
+): Promise<string[]> {
+  if (sourceLang === targetLang || !takeaways.length) {
+    return takeaways;
+  }
+
+  try {
+    const translatedTakeaways = await Promise.all(
+      takeaways.map(async (takeaway) => {
+        const translated = await translateContent(
+          sourceLang,
+          targetLang,
+          takeaway
+        );
+        return translated || takeaway; // Fallback to original if translation fails
+      })
+    );
+    return translatedTakeaways.filter((t): t is string => t !== null);
+  } catch (error) {
+    console.error("Error translating takeaways:", error);
+    return takeaways; // Return original takeaways if translation fails
+  }
+}

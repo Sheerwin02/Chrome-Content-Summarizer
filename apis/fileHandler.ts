@@ -1,12 +1,17 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { summarizeDoc } from "@/apis/summarize";
+
 interface FileState {
   content: string;
   mimeType: string;
+  fileName: string;
+  originalContent?: string;
+  contentLength?: number;
   isProcessing?: boolean;
 }
 
-let currentFileState: FileState | null = null;
+// Move this to module scope
+let globalFileState: FileState | null = null;
 
 export async function handleFileUploadAndSummarize(
   file: File | { name: string; type: string; data: string },
@@ -21,13 +26,7 @@ export async function handleFileUploadAndSummarize(
       file instanceof File ? file.name : file.name
     );
 
-    // Create file state
-    let currentFileState: {
-      content: string;
-      mimeType: string;
-      fileName: string;
-      originalContent?: string; // Add this to store original content
-    };
+    let fileState: FileState;
 
     if (file instanceof File) {
       // Read file content
@@ -36,7 +35,6 @@ export async function handleFileUploadAndSummarize(
         reader.onload = () => {
           let result = reader.result as string;
           if (file.type === "text/plain") {
-            // Store both original and processed content for text files
             resolve(result);
           } else {
             const base64 = result.split(",")[1] || result;
@@ -52,39 +50,85 @@ export async function handleFileUploadAndSummarize(
         }
       });
 
-      currentFileState = {
+      fileState = {
         mimeType: file.type || "text/plain",
         content: content,
         fileName: file.name,
         originalContent: file.type === "text/plain" ? content : undefined,
+        contentLength: content.length,
+        isProcessing: false,
       };
     } else {
-      currentFileState = {
+      fileState = {
         mimeType: file.type,
         content: file.data.includes(",") ? file.data.split(",")[1] : file.data,
         fileName: file.name,
         originalContent: file.type === "text/plain" ? file.data : undefined,
+        contentLength: file.data.length,
+        isProcessing: false,
       };
     }
 
+    // Store in global state
+    globalFileState = fileState;
+
     console.log("File state created:", {
-      mimeType: currentFileState.mimeType,
-      fileName: currentFileState.fileName,
-      contentLength: currentFileState.content.length,
-      hasOriginalContent: !!currentFileState.originalContent,
+      mimeType: fileState.mimeType,
+      fileName: fileState.fileName,
+      contentLength: fileState.contentLength,
+      hasOriginalContent: !!fileState.originalContent,
     });
 
-    // Store complete file state in chrome storage
-    await chrome.storage.local.set({ currentFileState });
+    // Store in chrome storage with validation
+    const storageState = {
+      ...fileState,
+      // Ensure we're not storing undefined values
+      contentLength: fileState.contentLength || fileState.content.length,
+      isProcessing: false,
+    };
+
+    await chrome.storage.local.set({
+      currentFileState: storageState,
+    });
+
     console.log("File state stored in chrome.storage.local");
 
     // Initial summary generation
     const { summarizeMode } = await chrome.storage.sync.get("summarizeMode");
-    return summarizeDoc(summarizeMode || "brief", genAI);
+    const mode = summarizeMode || "brief";
+
+    // Pass the complete file state to summarizeDoc
+    return summarizeDoc(mode, genAI, {
+      ...fileState,
+      contentLength: fileState.contentLength ?? fileState.content.length,
+    });
   } catch (error) {
     const errorMessage =
       error instanceof Error ? error.message : "Unknown error";
     console.error("Error processing file:", errorMessage);
+
+    // Clear state on error
+    globalFileState = null;
+    await chrome.storage.local.remove("currentFileState");
+
     throw new Error(`Error processing document: ${errorMessage}`);
   }
+}
+
+// Add helper function to get current file state
+export async function getCurrentFileState(): Promise<FileState | null> {
+  if (globalFileState) {
+    return globalFileState;
+  }
+
+  const { currentFileState } = await chrome.storage.local.get(
+    "currentFileState"
+  );
+  return currentFileState || null;
+}
+
+// Add helper function to clear file state
+export async function clearFileState(): Promise<void> {
+  globalFileState = null;
+  await chrome.storage.local.remove("currentFileState");
 }

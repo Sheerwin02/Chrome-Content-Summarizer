@@ -242,119 +242,83 @@ export async function handleSummarizeRequest(
   return true; // Keeps the message channel open for async response
 }
 
+interface FileState {
+  fileName: string;
+  content: string;
+  contentLength: number;
+  mimeType: string;
+  originalContent?: string;
+}
+
 export async function summarizeDoc(
   mode: string,
-  genAI: any
+  genAI: any,
+  fileState?: FileState
 ): Promise<{ summary: string; takeaways: string[] }> {
-  const { currentFileState } = await chrome.storage.local.get(
-    "currentFileState"
-  );
+  // If fileState isn't provided, try to get it from storage
+  if (!fileState) {
+    const { currentFileState } = await chrome.storage.local.get(
+      "currentFileState"
+    );
+    fileState = currentFileState;
+  }
 
-  if (!currentFileState) {
+  if (!fileState || !fileState.content) {
     throw new Error("No file content available");
   }
 
-  // Set processing flag
-  await chrome.storage.local.set({
-    currentFileState: { ...currentFileState, isProcessing: true },
-  });
+  console.log(
+    `Processing ${fileState.fileName} (${fileState.contentLength} bytes)`
+  );
 
   try {
-    let content = currentFileState.content;
+    let content = fileState.content;
 
-    // For text files, decode base64 if needed
-    if (currentFileState.mimeType === "text/plain") {
-      try {
-        if (content.match(/^[A-Za-z0-9+/=]+$/)) {
-          content = atob(content);
-        } else if (content.includes("base64,")) {
-          const base64Data = content.split("base64,")[1];
-          content = atob(base64Data);
-        }
-
-        content = content.trim();
-
-        // For very short text content, provide immediate response
-        if (content.length < 100) {
-          const result = {
-            summary: content,
-            takeaways: [content],
-          };
-
-          // Clear processing flag before returning
-          await chrome.storage.local.set({
-            currentFileState: { ...currentFileState, isProcessing: false },
-          });
-
-          return result;
-        }
-      } catch (error) {
-        console.error("Error processing text content:", error);
+    // For text files, use original content if available
+    if (fileState.mimeType === "text/plain" && fileState.originalContent) {
+      content = fileState.originalContent;
+    } else if (fileState.mimeType === "text/plain") {
+      // Handle potential base64 encoding
+      if (content.match(/^[A-Za-z0-9+/=]+$/)) {
+        content = atob(content);
+      } else if (content.includes("base64,")) {
+        const base64Data = content.split("base64,")[1];
+        content = atob(base64Data);
       }
     }
 
-    // For longer content or other file types, use the AI model
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
     const promptText = generatePromptText(mode);
 
-    let result;
-    // Handle text files
-    if (currentFileState.mimeType === "text/plain") {
-      result = await model.generateContent({
-        contents: [
-          {
-            role: "user",
-            parts: [{ text: content + "\n\n" + promptText }],
-          },
-        ],
-      });
-    } else {
-      // Handle other file types
-      if (!content.match(/^[A-Za-z0-9+/=]+$/)) {
-        const base64Match = content.match(/^data:.*;base64,(.*)$/);
-        if (base64Match) {
-          content = base64Match[1];
-        }
-      }
-
-      result = await model.generateContent({
-        contents: [
-          {
-            role: "user",
-            parts: [
-              {
-                inlineData: {
-                  mimeType: currentFileState.mimeType,
-                  data: content,
+    const result = await model.generateContent({
+      contents: [
+        {
+          role: "user",
+          parts: [
+            fileState.mimeType === "text/plain"
+              ? { text: content + "\n\n" + promptText }
+              : {
+                  inlineData: {
+                    mimeType: fileState.mimeType,
+                    data: content,
+                  },
                 },
-              },
-              { text: promptText },
-            ],
-          },
-        ],
-      });
-    }
+            fileState.mimeType !== "text/plain" ? { text: promptText } : null,
+          ].filter(Boolean),
+        },
+      ],
+    });
 
     const response = await result.response;
     const rawOutput = response.text();
+
     if (!rawOutput) {
       throw new Error("Received empty response from API");
     }
 
-    const processedOutput = processOutput(rawOutput);
-
-    // Clear processing flag before returning success
-    await chrome.storage.local.set({
-      currentFileState: { ...currentFileState, isProcessing: false },
-    });
-
-    return processedOutput;
+    return processOutput(rawOutput);
   } catch (error) {
-    console.error("Error in summarizeDoc:", error);
-    // Clear processing flag even if there's an error
-    await chrome.storage.local.set({
-      currentFileState: { ...currentFileState, isProcessing: false },
-    });
+    console.error(`Error processing ${fileState.fileName}:`, error);
     throw error;
   }
 }
