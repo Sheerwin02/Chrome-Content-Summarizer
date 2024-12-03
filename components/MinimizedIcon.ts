@@ -1,12 +1,15 @@
 import { restoreSidebar } from "./Sidebar";
 import "./sidebar.css";
 
+// Import the logo
+import logoImage from "../public/icon/logo.png";
+
 let isDarkMode = true; // Default to dark mode
 
 export function createMinimizedIcon() {
   let minimizedIcon = document.getElementById("minimizedSidebarIcon");
 
-  // Only create the icon if it doesn’t already exist
+  // Only create the icon if it doesn't already exist
   if (!minimizedIcon) {
     minimizedIcon = document.createElement("div");
     minimizedIcon.id = "minimizedSidebarIcon";
@@ -14,7 +17,7 @@ export function createMinimizedIcon() {
       ? "dark-minimized-icon"
       : "light-minimized-icon";
 
-    minimizedIcon.innerHTML = `<img src="https://uxwing.com/wp-content/themes/uxwing/download/brands-and-social-media/google-gemini-icon.png" alt="Icon" style="width: 22px; height: 22px;" />`;
+    minimizedIcon.innerHTML = `<img src="${logoImage}" alt="Logo" style="width: 22px; height: 22px;" />`;
     minimizedIcon.onclick = () => restoreSidebar(); // Add restore behavior
 
     // Set initial position at the top-right corner

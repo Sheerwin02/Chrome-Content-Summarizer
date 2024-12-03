@@ -13,6 +13,14 @@ interface ContentState {
     mode: string;
   };
   isProcessing: boolean;
+  currentRequest?: AbortController; // Add this to track current request
+}
+
+export interface FileState {
+  content: string;
+  mimeType: string;
+  name: string;
+  isProcessing: boolean;
 }
 
 let currentState: ContentState = {
@@ -112,8 +120,17 @@ export default defineBackground(() => {
         sendResponse({ initialized: !!genAI });
         return true;
 
+      // In the handleMessage function, modify the summarize case:
       case "summarize": {
         console.log("Handling summarize action:", message);
+
+        // Cancel any existing request
+        if (currentState.currentRequest) {
+          currentState.currentRequest.abort();
+        }
+
+        const abortController = new AbortController();
+        currentState.currentRequest = abortController;
 
         const { text, mode } = message;
         if (!text) {
@@ -122,27 +139,58 @@ export default defineBackground(() => {
           return true;
         }
 
-        // Using the summarizeText function from summarize.ts
+        // Add timeout handling
+        const timeout = setTimeout(() => {
+          if (currentState.isProcessing) {
+            abortController.abort();
+            sendResponse({
+              error:
+                "Request timed out. Please try again with a shorter text selection.",
+            });
+          }
+        }, 30000); // 30 second timeout
+
         (async () => {
           try {
-            const result = await summarizeText(text, mode || "brief");
+            currentState.isProcessing = true;
+            const result = await summarizeText(
+              text,
+              mode || "brief",
+              abortController.signal
+            );
+            clearTimeout(timeout);
+            currentState.isProcessing = false;
             console.log("Summarization result:", result);
             sendResponse({
-              summary: result.summary,
-              takeaways: result.takeaways,
+              summary: result?.summary ?? "",
+              takeaways: result?.takeaways ?? [],
             });
           } catch (error) {
+            clearTimeout(timeout);
+            currentState.isProcessing = false;
             console.error("Summarization error:", error);
+
+            // Check if it was an abort
+            if ((error as Error).name === "AbortError") {
+              sendResponse({
+                error:
+                  "Operation cancelled. Please try again with a shorter selection.",
+              });
+              return;
+            }
+
             sendResponse({
               error:
                 error instanceof Error
                   ? error.message
                   : "Failed to summarize text",
             });
+          } finally {
+            currentState.currentRequest = undefined;
           }
         })();
 
-        return true; // Keep the message channel open for async response
+        return true;
       }
 
       case "summarizeDocument": {
@@ -260,77 +308,85 @@ export default defineBackground(() => {
         clearTimeout(modeChangeTimeout);
       }
 
-      modeChangeTimeout = setTimeout(() => {
+      modeChangeTimeout = setTimeout(async () => {
         let port: chrome.runtime.Port | null = null;
 
-        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        try {
+          const tabs = await chrome.tabs.query({
+            active: true,
+            currentWindow: true,
+          });
           const activeTab = tabs[0];
           if (!activeTab?.id) return;
 
           port = chrome.tabs.connect(activeTab.id, { name: "modeSwitchPort" });
           port.postMessage({ action: "showLoading" });
 
-          (async () => {
-            try {
-              const { summarizeMode } = await chrome.storage.sync.get(
-                "summarizeMode"
-              );
-              const mode = summarizeMode || "brief";
+          const { summarizeMode } = await chrome.storage.sync.get(
+            "summarizeMode"
+          );
+          const mode = summarizeMode || "brief";
 
-              let result;
-              if (currentState.type === "document" && currentState.content) {
-                if (!genAI) {
-                  throw new Error("AI model not initialized");
-                }
+          // Get the current file state from storage
+          const { currentFileState } = await chrome.storage.local.get(
+            "currentFileState"
+          );
 
-                const fileState = await chrome.storage.local.get(
-                  "currentFileState"
-                );
-                if (!fileState.currentFileState) {
-                  throw new Error("No file state available");
-                }
+          console.log("Current file state:", currentFileState);
+          console.log("Current state type:", currentState.type);
 
-                port.postMessage({
-                  action: "processingUpdate",
-                  status: "Regenerating summary...",
-                });
-
-                result = await summarizeDoc(mode, genAI);
-              } else if (currentState.type === "text" && currentState.content) {
-                result = await summarizeText(currentState.content, mode);
-              } else {
-                throw new Error("No content available to regenerate");
-              }
-
-              if (result) {
-                currentState.lastSummary = { ...result, mode };
-                port.postMessage({
-                  action: "displaySummary",
-                  summary: result.summary,
-                  takeaways: result.takeaways,
-                  mode: mode,
-                  isDocument: currentState.type === "document",
-                });
-              }
-            } catch (error) {
-              console.error("Error in mode change handler:", error);
-              port?.postMessage({
-                action: "displayError",
-                error:
-                  error instanceof Error
-                    ? error.message
-                    : "Failed to regenerate summary",
-              });
-            } finally {
-              port?.postMessage({ action: "hideLoading" });
-              setTimeout(() => {
-                if (port) {
-                  port.disconnect();
-                }
-              }, 100);
+          let result;
+          if (currentState.type === "document") {
+            if (!currentFileState) {
+              throw new Error("No file state available for regeneration");
             }
-          })();
-        });
+
+            if (!genAI) {
+              throw new Error("AI model not initialized");
+            }
+
+            port.postMessage({
+              action: "processingUpdate",
+              status: "Regenerating summary...",
+            });
+
+            // Ensure we're using the stored file state for regeneration
+            result = await summarizeDoc(mode, genAI, currentFileState);
+          } else if (currentState.type === "text" && currentState.content) {
+            result = await summarizeText(
+              currentState.content,
+              mode,
+              new AbortController().signal
+            );
+          } else {
+            throw new Error("No content available to regenerate");
+          }
+
+          if (result) {
+            currentState.lastSummary = { ...result, mode };
+            port.postMessage({
+              action: "displaySummary",
+              summary: result.summary,
+              takeaways: result.takeaways,
+              mode: mode,
+              isDocument: currentState.type === "document",
+            });
+          }
+        } catch (error) {
+          console.error("Error in mode change handler:", error);
+          port?.postMessage({
+            action: "displayError",
+            error:
+              error instanceof Error
+                ? error.message
+                : "Failed to regenerate summary",
+          });
+        } finally {
+          port?.postMessage({ action: "hideLoading" });
+          if (port) {
+            setTimeout(() => port?.disconnect(), 100);
+          }
+        }
       }, 300);
     }
   });
