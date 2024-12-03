@@ -31,23 +31,26 @@ This template should help get you started developing with React in WXT.
 
 This extension leverages Chrome's Built-In Translation API to provide seamless translation capabilities for summarized content.
 
+![image](https://github.com/user-attachments/assets/519854b6-6e64-4ffb-b7f1-d7814239364f)
+![image](https://github.com/user-attachments/assets/6e4e2bb8-1103-49fc-91dd-1cea89430975)
+
 ### Features
 
 - Automatic Translation: Translates summaries into the target language specified in the extension settings.
 
 - Supported Languages:
 
-- - English (en)
-    Mandarin Chinese (Simplified) (zh)
-    Taiwanese Mandarin (Traditional) (zh-Hant)
-    Japanese (ja)
-    Portuguese (pt)
-    Russian (ru)
-    Spanish (es)
-    Turkish (tr)
-    Hindi (hi)
-    Vietnamese (vi)
-    Bengali (bn)
+  - English (en)
+  - Mandarin Chinese (Simplified) (zh)
+  - Taiwanese Mandarin (Traditional) (zh-Hant)
+  - Japanese (ja)
+  - Portuguese (pt)
+  - Russian (ru)
+  - Spanish (es)
+  - Turkish (tr)
+  - Hindi (hi)
+  - Vietnamese (vi)
+  - Bengali (bn)
 
 - User-Controlled Settings: Users can configure the source and target languages through the extension's settings.
 
