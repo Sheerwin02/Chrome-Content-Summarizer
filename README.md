@@ -70,6 +70,7 @@ To use the translation features, ensure that Chrome's Translation API is enabled
 ## Create a .env file and add your Google AI API key
 
 `echo "VITE_API_KEY=your_api_key_here" > .env`
+*You need to add the translation_api key as VITE_TRANSLATE_API_KEY in your .env file too. 
 
 ## Run the program
 
